@@ -56,7 +56,7 @@ Frame.InputBegan:Connect(function(input)
 	end
 end)
 
--- toggle button (top-right)
+-- toggle button
 local ToggleButton = Instance.new("TextButton")
 ToggleButton.Size = UDim2.new(0,30,0,30)
 ToggleButton.Position = UDim2.new(1, -40, 0, 10)
@@ -223,19 +223,16 @@ tracer.Transparency = 1
 
 -- RunService loop
 RunService:BindToRenderStep("SpectateCamera", Enum.RenderPriority.Camera.Value, function()
-	-- camera follow
 	if viewing and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
 		local hrp = targetPlayer.Character.HumanoidRootPart
 		Camera.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(pitch, yaw, 0) * CFrame.new(0,0,zoomDistance)
 	end
 
-	-- tracer & highlight always active if eTarget exists
 	if eTarget and eTarget.Character and eTarget.Character:FindFirstChild("HumanoidRootPart") then
 		local hrp = eTarget.Character.HumanoidRootPart
 		local mousePos = UserInputService:GetMouseLocation()
 		local targetPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
 
-		-- only show tracer if in front of camera
 		if targetPos.Z > 0 then
 			tracer.From = Vector2.new(mousePos.X, mousePos.Y)
 			tracer.To = Vector2.new(targetPos.X, targetPos.Y)
@@ -244,7 +241,6 @@ RunService:BindToRenderStep("SpectateCamera", Enum.RenderPriority.Camera.Value, 
 			tracer.Visible = false
 		end
 
-		-- highlight always active
 		if highlight then
 			highlight.Adornee = eTarget.Character
 		else
@@ -275,11 +271,11 @@ TPBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- press E -> toggle selection instantly
-UserInputService.InputBegan:Connect(function(input)
+-- E toggle (disabled if typing)
+UserInputService.InputBegan:Connect(function(input, processed)
 	if input.KeyCode == Enum.KeyCode.E then
+		if TextBox:IsFocused() then return end -- don't trigger while typing
 		if eTarget then
-			-- unselect immediately
 			eTarget = nil
 			tracer.Visible = false
 			targetPlayer = nil
@@ -290,7 +286,6 @@ UserInputService.InputBegan:Connect(function(input)
 				highlight = nil
 			end
 		else
-			-- select nearest player to mouse
 			local closestPlayer = nil
 			local shortestDist = math.huge
 			local mousePos = UserInputService:GetMouseLocation()
@@ -326,7 +321,7 @@ UserInputService.InputBegan:Connect(function(input)
 	end
 end)
 
--- toggle GUI visibility with ]
+-- toggle GUI with ]
 UserInputService.InputBegan:Connect(function(input, processed)
 	if processed then return end
 	if input.KeyCode == Enum.KeyCode.RightBracket then
