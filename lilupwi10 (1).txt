@@ -180,6 +180,18 @@ TextBox:GetPropertyChangedSignal("Text"):Connect(updateSuggestions)
 Players.PlayerAdded:Connect(updateSuggestions)
 Players.PlayerRemoving:Connect(updateSuggestions)
 
+-- handle pressing Enter or losing focus
+TextBox.FocusLost:Connect(function(enterPressed)
+	if enterPressed then
+		local matches = findMatches(TextBox.Text)
+		if #matches > 0 then
+			targetPlayer = matches[1]
+		end
+	end
+	TextBox.Text = ""
+	SuggestionBox.CanvasPosition = Vector2.new(0,0)
+end)
+
 -- camera controls
 UserInputService.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
@@ -211,21 +223,38 @@ tracer.Transparency = 1
 
 -- RunService loop
 RunService:BindToRenderStep("SpectateCamera", Enum.RenderPriority.Camera.Value, function()
+	-- camera follow
 	if viewing and targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") then
 		local hrp = targetPlayer.Character.HumanoidRootPart
 		Camera.CFrame = CFrame.new(hrp.Position) * CFrame.Angles(pitch, yaw, 0) * CFrame.new(0,0,zoomDistance)
 	end
 
+	-- tracer & highlight always active if eTarget exists
 	if eTarget and eTarget.Character and eTarget.Character:FindFirstChild("HumanoidRootPart") then
 		local hrp = eTarget.Character.HumanoidRootPart
 		local mousePos = UserInputService:GetMouseLocation()
 		local targetPos, onScreen = Camera:WorldToViewportPoint(hrp.Position)
-		if onScreen then
+
+		-- only show tracer if in front of camera
+		if targetPos.Z > 0 then
 			tracer.From = Vector2.new(mousePos.X, mousePos.Y)
 			tracer.To = Vector2.new(targetPos.X, targetPos.Y)
 			tracer.Visible = true
 		else
 			tracer.Visible = false
+		end
+
+		-- highlight always active
+		if highlight then
+			highlight.Adornee = eTarget.Character
+		else
+			highlight = Instance.new("Highlight")
+			highlight.FillColor = Color3.fromRGB(0,255,0)
+			highlight.OutlineColor = Color3.fromRGB(0,255,0)
+			highlight.OutlineTransparency = 0
+			highlight.FillTransparency = 0.6
+			highlight.Adornee = eTarget.Character
+			highlight.Parent = eTarget.Character
 		end
 	else
 		tracer.Visible = false
@@ -246,40 +275,38 @@ TPBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
--- press E -> toggle nearest target
-UserInputService.InputBegan:Connect(function(input, processed)
-	if processed then return end
+-- press E -> toggle selection instantly
+UserInputService.InputBegan:Connect(function(input)
 	if input.KeyCode == Enum.KeyCode.E then
-		local closestPlayer = nil
-		local shortestDist = math.huge
-		local mousePos = UserInputService:GetMouseLocation()
-		for _, p in pairs(Players:GetPlayers()) do
-			if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
-				local screenPos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
-				if onScreen then
-					local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mousePos.X, mousePos.Y)).Magnitude
-					if dist < shortestDist then
-						shortestDist = dist
-						closestPlayer = p
+		if eTarget then
+			-- unselect immediately
+			eTarget = nil
+			tracer.Visible = false
+			targetPlayer = nil
+			TextBox.Text = ""
+			if highlight then
+				highlight.Adornee = nil
+				highlight:Destroy()
+				highlight = nil
+			end
+		else
+			-- select nearest player to mouse
+			local closestPlayer = nil
+			local shortestDist = math.huge
+			local mousePos = UserInputService:GetMouseLocation()
+			for _, p in pairs(Players:GetPlayers()) do
+				if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+					local screenPos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+					if onScreen then
+						local dist = (Vector2.new(screenPos.X, screenPos.Y) - Vector2.new(mousePos.X, mousePos.Y)).Magnitude
+						if dist < shortestDist then
+							shortestDist = dist
+							closestPlayer = p
+						end
 					end
 				end
 			end
-		end
-
-		if closestPlayer then
-			if eTarget == closestPlayer then
-				-- unselect fully
-				eTarget = nil
-				tracer.Visible = false
-				targetPlayer = nil
-				TextBox.Text = ""
-				if highlight then
-					highlight.Adornee = nil
-					highlight:Destroy()
-					highlight = nil
-				end
-			else
-				-- select new
+			if closestPlayer then
 				eTarget = closestPlayer
 				targetPlayer = closestPlayer
 				TextBox.Text = targetPlayer.Name
