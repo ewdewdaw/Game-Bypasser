@@ -1,3 +1,5 @@
+make it so money counter refresehs every 10 seconds also its Carters DHC
+
 -- Money Tracker for Roblox - Executor Version with Loading Screen
 if not game:IsLoaded() then
     game.Loaded:Wait()
@@ -50,7 +52,7 @@ local logoLabel = Instance.new("TextLabel")
 logoLabel.Size = UDim2.new(0, 400, 0, 120)
 logoLabel.Position = UDim2.new(0.5, -200, 0.4, -60)
 logoLabel.BackgroundTransparency = 1
-logoLabel.Text = "Carters's DHC"
+logoLabel.Text = "Carter's DHC"
 logoLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 logoLabel.Font = Enum.Font.GothamBlack
 logoLabel.TextSize = 48
@@ -704,7 +706,7 @@ function showAlert(player, current, target)
     -- Create alert sound
     if not alertSound then
         alertSound = Instance.new("Sound")
-        alertSound.SoundId = "rbxassetid://9114266661" -- Warning sound
+    alertSound.SoundId = "rbxassetid://9114266661" -- Warning sound
         alertSound.Volume = 0.5
         alertSound.Parent = ScreenGui
     end
@@ -1101,6 +1103,14 @@ local function setupMoneyTracking()
             end
         end)
     end
+    
+    -- NEW: Set up periodic refresh every 10 seconds
+    spawn(function()
+        while true do
+            wait(10) -- Wait 10 seconds
+            updateMoneyDisplay() -- Refresh the money counter
+        end
+    end)
 end
 
 -- Set up player list
