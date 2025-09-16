@@ -53,6 +53,10 @@ local deathTimeWindow = 180 -- 3 minutes in seconds
 -- Track current mode for anti-death feature
 local currentMode = "Stand"
 
+-- Track if server monitoring is active
+local serverMonitoringActive = false
+local serverMonitoringTask = nil
+
 -- Universal HTTP request function for all executor environments
 local function httpRequest(options)
     -- Try different request methods for different executors
@@ -319,8 +323,11 @@ local function setupAntiDeathFeature()
     end)
 end
 
--- Save user ID and server ID to Firebase when script starts and check for multiple users
-task.spawn(function()
+-- Function to start server monitoring (only for Cash mode)
+local function startServerMonitoring()
+    if serverMonitoringActive then return end
+    serverMonitoringActive = true
+    
     -- NEW: Check if we're in a testing scenario and disable server hopping if so
     local isTestingWithAlt = false
     local currentUserId = game.Players.LocalPlayer.UserId
@@ -353,22 +360,33 @@ task.spawn(function()
         end
         
         -- Periodically update our server status (every 2 minutes)
-        while task.wait(120) do
-            saveUserServerToFirebase()
-            
-            -- Also check if we need to hop (in case someone joined later)
-            if checkForMultipleScriptUsersInSameServer() then
-                print("Server hopping to avoid multiple script users in same server...")
-                task.wait(2)
-                serverHop()
-                break
+        serverMonitoringTask = task.spawn(function()
+            while serverMonitoringActive and task.wait(120) do
+                saveUserServerToFirebase()
+                
+                -- Also check if we need to hop (in case someone joined later)
+                if checkForMultipleScriptUsersInSameServer() then
+                    print("Server hopping to avoid multiple script users in same server...")
+                    task.wait(2)
+                    serverHop()
+                    break
+                end
             end
-        end
+        end)
     else
         -- Just save our data once but don't monitor for server hopping
         saveUserServerToFirebase()
     end
-end)
+end
+
+-- Function to stop server monitoring
+local function stopServerMonitoring()
+    serverMonitoringActive = false
+    if serverMonitoringTask then
+        task.cancel(serverMonitoringTask)
+        serverMonitoringTask = nil
+    end
+end
 
 -- FIXED: Safe FPS cap setting function - REMOVED AUTOMATIC FPS CAP
 local function setFpsCap(value)
@@ -385,6 +403,7 @@ end
 -- STAND SCRIPT FUNCTION - EXACT FORMAT AS SPECIFIED
 local function RunStand()
     currentMode = "Stand"
+    stopServerMonitoring() -- Stop server monitoring when not in Cash mode
     
     getgenv()._=
     "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai >.+ | If you pay for this script you get scammed, this script is completely free ok"
@@ -442,6 +461,7 @@ end
 -- SNIPER SCRIPT FUNCTION - EXACT FORMAT AS SPECIFIED
 local function RunSniper()
     currentMode = "Sniper"
+    stopServerMonitoring() -- Stop server monitoring when not in Cash mode
     
     getgenv()._=
     "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai | If you pay for this script you get scammed, this script is completely free ok"
@@ -497,7 +517,7 @@ local function RunSniper()
 
         ['AuraRange'] = 25, --Range on how far will be the kill aura
 
-        ['CrewID'] = 7, --Crew id, preferable to be in both same crew alt/main
+        ['CcrewID'] = 7, --Crew id, preferable to be in both same crew alt/main
         ['VoidView'] = true, --Puts urs camera to void, gradually increasing ur fps
         ['AntiStomp'] = true, --Self explainatory
         ['HideScreen'] = true, --Boost fps and lowered cpu consumption, recomended
@@ -509,6 +529,7 @@ end
 -- MONEY FARM SCRIPT - REMOVED AUTOMATIC FPS CAP
 local MoneyFarmScript = function()
     currentMode = "Cash"
+    startServerMonitoring() -- Start server monitoring for Cash mode
     
     -- Get blacklisted users from Firebase (for the money farm functionality)
     local blacklistedUsers = {1234567890, 1234567890, 1234567890} -- Default fallback
@@ -563,6 +584,7 @@ end
 -- DHC SCRIPT FUNCTION
 local function RunDHC()
     currentMode = "DHC"
+    stopServerMonitoring() -- Stop server monitoring when not in Cash mode
     
     -- Add your DHC script execution code here
     -- For example, if you have a DHC script hosted somewhere:
