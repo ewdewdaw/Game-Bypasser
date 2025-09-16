@@ -560,23 +560,6 @@ local MoneyFarmScript = function()
     loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/atmfarm/refs/heads/main/utilities.lua'))()
 end
 
--- DHC SCRIPT FUNCTION
-local function RunDHC()
-    currentMode = "DHC"
-    
-    -- Add your DHC script execution code here
-    -- For example, if you have a DHC script hosted somewhere:
-    -- loadstring(game:HttpGet('https://your-dhc-script-url.com/script.lua'))()
-    
-    -- Or if you want to execute the script you provided:
-    getgenv().Settings = {
-        Whitelisted = {1049113524, 3115885882, 9212694013}, -- User ID(s) of accounts that can use commands
-    }
-    loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/altcontrol/refs/heads/main/main.lua'))()
-    
-    print("DHC script executed!")
-end
-
 -- AUTOEXEC HANDLER
 local function hideAllGUIs()
     local parentUI = (gethui and gethui()) or game:GetService("CoreGui") or game:GetService("StarterGui")
@@ -603,10 +586,8 @@ local function startAutoExec()
             MoneyFarmScript()
         elseif lastMode == "Stand" then
             RunStand()
-        elseif lastMode == "Sniper" then
+        else
             RunSniper()
-        elseif lastMode == "DHC" then
-            RunDHC()
         end
     end)
 end
@@ -989,7 +970,7 @@ end
 -- MODE SELECTOR (centered buttons + live countdown)
 function showModeSelector(parent)
     if not showModeSelectorToggle then return end
-    local screenGui = createFrame("ModeSelector", UDim2.new(0, 360, 0, 380), UDim2.new(0.5, -180, 0.5, -190), parent, COLORS.Panel, 8)
+    local screenGui = createFrame("ModeSelector", UDim2.new(0, 360, 0, 320), UDim2.new(0.5, -180, 0.5, -160), parent, COLORS.Panel, 8)
 
     -- Header
     local header = createFrame("Header", UDim2.new(1, 0, 0, 50), UDim2.new(0, 0, 0, 0), screenGui, COLORS.Header, 8)
@@ -1026,8 +1007,7 @@ function showModeSelector(parent)
             hideAllGUIs()
             if name == "Stand" then RunStand()
             elseif name == "Sniper" then RunSniper()
-            elseif name == "Cash" then MoneyFarmScript()
-            elseif name == "DHC" then RunDHC() end
+            elseif name == "Cash" then MoneyFarmScript() end
         end)
         return btn
     end
@@ -1035,7 +1015,6 @@ function showModeSelector(parent)
     makeBtn("Stand", 90)
     makeBtn("Sniper", 150)
     makeBtn("Cash", 210)
-    makeBtn("DHC", 270)  -- Added DHC button
 end
 
 -- EXECUTE ALL
