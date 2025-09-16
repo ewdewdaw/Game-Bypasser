@@ -577,7 +577,9 @@ local MoneyFarmScript = function()
         table.concat(getgenv().AutofarmSettings.Serverhop.BlacklistedUsers, ",")
     )
     
-    -- REMOVED: Automatic FPS cap to prevent the glitch
+   -- REMOVED: Automatic FPS cap to prevent the glitch
+    
+    -- FIX: Actually execute the money farm script
     loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/atmfarm/refs/heads/main/utilities.lua'))()
 end
 
