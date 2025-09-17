@@ -53,6 +53,10 @@ local deathTimeWindow = 180 -- 3 minutes in seconds
 -- Track current mode for anti-death feature
 local currentMode = "Stand"
 
+-- Track if server monitoring is active
+local serverMonitoringActive = false
+local serverMonitoringTask = nil
+
 -- Universal HTTP request function for all executor environments
 local function httpRequest(options)
     -- Try different request methods for different executors
@@ -319,8 +323,11 @@ local function setupAntiDeathFeature()
     end)
 end
 
--- Save user ID and server ID to Firebase when script starts and check for multiple users
-task.spawn(function()
+-- Function to start server monitoring (only for Cash mode)
+local function startServerMonitoring()
+    if serverMonitoringActive then return end
+    serverMonitoringActive = true
+    
     -- NEW: Check if we're in a testing scenario and disable server hopping if so
     local isTestingWithAlt = false
     local currentUserId = game.Players.LocalPlayer.UserId
@@ -353,22 +360,33 @@ task.spawn(function()
         end
         
         -- Periodically update our server status (every 2 minutes)
-        while task.wait(120) do
-            saveUserServerToFirebase()
-            
-            -- Also check if we need to hop (in case someone joined later)
-            if checkForMultipleScriptUsersInSameServer() then
-                print("Server hopping to avoid multiple script users in same server...")
-                task.wait(2)
-                serverHop()
-                break
+        serverMonitoringTask = task.spawn(function()
+            while serverMonitoringActive and task.wait(120) do
+                saveUserServerToFirebase()
+                
+                -- Also check if we need to hop (in case someone joined later)
+                if checkForMultipleScriptUsersInSameServer() then
+                    print("Server hopping to avoid multiple script users in same server...")
+                    task.wait(2)
+                    serverHop()
+                    break
+                end
             end
-        end
+        end)
     else
         -- Just save our data once but don't monitor for server hopping
         saveUserServerToFirebase()
     end
-end)
+end
+
+-- Function to stop server monitoring
+local function stopServerMonitoring()
+    serverMonitoringActive = false
+    if serverMonitoringTask then
+        task.cancel(serverMonitoringTask)
+        serverMonitoringTask = nil
+    end
+end
 
 -- FIXED: Safe FPS cap setting function - REMOVED AUTOMATIC FPS CAP
 local function setFpsCap(value)
@@ -385,6 +403,7 @@ end
 -- STAND SCRIPT FUNCTION - EXACT FORMAT AS SPECIFIED
 local function RunStand()
     currentMode = "Stand"
+    stopServerMonitoring() -- Stop server monitoring when not in Cash mode
     
     getgenv()._=
     "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai >.+ | If you pay for this script you get scammed, this script is completely free ok"
@@ -442,6 +461,7 @@ end
 -- SNIPER SCRIPT FUNCTION - EXACT FORMAT AS SPECIFIED
 local function RunSniper()
     currentMode = "Sniper"
+    stopServerMonitoring() -- Stop server monitoring when not in Cash mode
     
     getgenv()._=
     "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai | If you pay for this script you get scammed, this script is completely free ok"
@@ -497,7 +517,7 @@ local function RunSniper()
 
         ['AuraRange'] = 25, --Range on how far will be the kill aura
 
-        ['CrewID'] = 7, --Crew id, preferable to be in both same crew alt/main
+        ['CcrewID'] = 7, --Crew id, preferable to be in both same crew alt/main
         ['VoidView'] = true, --Puts urs camera to void, gradually increasing ur fps
         ['AntiStomp'] = true, --Self explainatory
         ['HideScreen'] = true, --Boost fps and lowered cpu consumption, recomended
@@ -509,6 +529,7 @@ end
 -- MONEY FARM SCRIPT - REMOVED AUTOMATIC FPS CAP
 local MoneyFarmScript = function()
     currentMode = "Cash"
+    startServerMonitoring() -- Start server monitoring for Cash mode
     
     -- Get blacklisted users from Firebase (for the money farm functionality)
     local blacklistedUsers = {1234567890, 1234567890, 1234567890} -- Default fallback
@@ -560,6 +581,24 @@ local MoneyFarmScript = function()
     loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/atmfarm/refs/heads/main/utilities.lua'))()
 end
 
+-- DHC SCRIPT FUNCTION
+local function RunDHC()
+    currentMode = "DHC"
+    stopServerMonitoring() -- Stop server monitoring when not in Cash mode
+    
+    -- Add your DHC script execution code here
+    -- For example, if you have a DHC script hosted somewhere:
+    -- loadstring(game:HttpGet('https://your-dhc-script-url.com/script.lua'))()
+    
+    -- Or if you want to execute the script you provided:
+    getgenv().Settings = {
+        Whitelisted = {1049113524, 3115885882, 9212694013}, -- User ID(s) of accounts that can use commands
+    }
+    loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/altcontrol/refs/heads/main/main.lua'))()
+    
+    print("DHC script executed!")
+end
+
 -- AUTOEXEC HANDLER
 local function hideAllGUIs()
     local parentUI = (gethui and gethui()) or game:GetService("CoreGui") or game:GetService("StarterGui")
@@ -586,8 +625,10 @@ local function startAutoExec()
             MoneyFarmScript()
         elseif lastMode == "Stand" then
             RunStand()
-        else
+        elseif lastMode == "Sniper" then
             RunSniper()
+        elseif lastMode == "DHC" then
+            RunDHC()
         end
     end)
 end
@@ -608,6 +649,27 @@ local COLORS = {
     Danger = Color3.fromRGB(200, 80, 80),
     Accent = Color3.fromRGB(0, 120, 255)
 }
+
+-- Function to get screen size and calculate responsive sizes
+local function getResponsiveSizes()
+    local viewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+    local isMobile = viewportSize.X < 1000 -- Assume mobile if screen width is less than 1000 pixels
+    
+    local scaleFactor = math.min(viewportSize.X / 1920, viewportSize.Y / 1080)
+    
+    return {
+        viewportSize = viewportSize,
+        isMobile = isMobile,
+        scaleFactor = scaleFactor,
+        panelWidth = isMobile and viewportSize.X * 0.9 or 280 * scaleFactor,
+        panelHeight = isMobile and viewportSize.Y * 0.8 or 480 * scaleFactor,
+        buttonHeight = isMobile and 50 * scaleFactor or 30 * scaleFactor,
+        textSize = isMobile and 16 * scaleFactor or 14 * scaleFactor,
+        headerHeight = isMobile and 50 * scaleFactor or 40 * scaleFactor,
+        cornerRadius = isMobile and 12 or 8,
+        spacing = isMobile and 15 * scaleFactor or 10 * scaleFactor
+    }
+end
 
 -- Function to create sleek UI elements with proper z-index management
 local function createFrame(name, size, position, parent, color, cornerRadius)
@@ -758,6 +820,7 @@ local function createMainGUI()
     mainGui.Name = "MergedScriptUI"
     mainGui.Parent = parentUI
     mainGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    mainGui.ResetOnSpawn = false
     
     return mainGui
 end
@@ -772,24 +835,28 @@ local positionButtons = {}
 
 -- SETTINGS UI (EXTENDED TO FIT SAVE BUTTON)
 local function createSettingsUI(parent)
-    local gui = createFrame("SettingsPanel", UDim2.new(0, 280, 0, 480), UDim2.new(1, -290, 0.1, 0), parent, COLORS.Panel, 8)
+    local sizes = getResponsiveSizes()
+    local gui = createFrame("SettingsPanel", 
+        UDim2.new(0, sizes.panelWidth, 0, sizes.panelHeight), 
+        sizes.isMobile and UDim2.new(0.5, -sizes.panelWidth/2, 0.5, -sizes.panelHeight/2) or UDim2.new(1, -sizes.panelWidth - 10, 0.1, 0), 
+        parent, COLORS.Panel, sizes.cornerRadius)
     
     -- Header
-    local header = createFrame("Header", UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, 8)
-    local title = createTextLabel("Title", "SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, 16, true)
+    local header = createFrame("Header", UDim2.new(1, 0, 0, sizes.headerHeight), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, sizes.cornerRadius)
+    local title = createTextLabel("Title", "SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, sizes.textSize + 2, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
     
     -- Content area
-    local content = createFrame("Content", UDim2.new(1, -20, 1, -50), UDim2.new(0, 10, 0, 45), gui, Color3.fromRGB(0, 0, 0), 0)
+    local content = createFrame("Content", UDim2.new(1, -20, 1, -sizes.headerHeight - 10), UDim2.new(0, 10, 0, sizes.headerHeight + 5), gui, Color3.fromRGB(0, 0, 0), 0)
     content.BackgroundTransparency = 1
     
     -- Calculate positions
     local yPosition = 0
-    local elementHeight = 30
-    local spacing = 10
+    local elementHeight = sizes.buttonHeight
+    local spacing = sizes.spacing
     
     -- Owner name
-    local nameLabel = createTextLabel("NameLabel", "Owner Username:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, 14, false)
+    local nameLabel = createTextLabel("NameLabel", "Owner Username:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
     yPosition = yPosition + 20
     local nameBox = createTextBox("OwnerUsername", getgenv().Owner, UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
@@ -803,26 +870,26 @@ local function createSettingsUI(parent)
     yPosition = yPosition + elementHeight + spacing
     
     -- Timer
-    local timerLabel = createTextLabel("TimerLabel", "AutoExec Timer (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, 14, false)
+    local timerLabel = createTextLabel("TimerLabel", "AutoExec Timer (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
     yPosition = yPosition + 20
     local timerBox = createTextBox("AutoExecTimer", tostring(autoExecTimer), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
     
     -- Webhook
-    local webhookLabel = createTextLabel("WebhookLabel", "Webhook URL:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, 14, false)
+    local webhookLabel = createTextLabel("WebhookLabel", "Webhook URL:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
     yPosition = yPosition + 20
     local webhookBox = createTextBox("WebhookURL", truncateText(webhookUrl, 20), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     webhookBox:SetAttribute("FullText", webhookUrl)
     yPosition = yPosition + elementHeight + spacing
     
     -- Message wait
-    local messageWaitLabel = createTextLabel("MessageWaitLabel", "Message Wait (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, 14, false)
+    local messageWaitLabel = createTextLabel("MessageWaitLabel", "Message Wait (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
     yPosition = yPosition + 20
     local messageWaitBox = createTextBox("MessageWait", tostring(messageWait), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
     
     -- Server hop time
-    local serverHopLabel = createTextLabel("ServerHopLabel", "Server Hop Time (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, 14, false)
+    local serverHopLabel = createTextLabel("ServerHopLabel", "Server Hop Time (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
     yPosition = yPosition + 20
     local serverHopBox = createTextBox("ServerHopTime", tostring(serverHopTime), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
@@ -830,7 +897,7 @@ local function createSettingsUI(parent)
     -- Save button (with extra space)
     local saveBtn = createButton("SaveButton", "SAVE ALL SETTINGS", UDim2.new(1, 0, 0, elementHeight + 5), UDim2.new(0, 0, 0, yPosition + 10), content, true, false)
     saveBtn.Font = Enum.Font.GothamBold
-    saveBtn.TextSize = 15
+    saveBtn.TextSize = sizes.textSize + 1
     
     -- Webhook box focus events
     webhookBox.Focused:Connect(function()
@@ -924,20 +991,25 @@ end
 
 -- DROPDOWN UI (Positions)
 local function createDropdownUI(parent)
-    local gui = createFrame("DropdownPanel", UDim2.new(0, 280, 0, 220), UDim2.new(1, -290, 0.7, -110), parent, COLORS.Panel, 8)
+    local sizes = getResponsiveSizes()
+    local panelHeight = sizes.isMobile and sizes.panelHeight * 0.6 or 220
+    local gui = createFrame("DropdownPanel", 
+        UDim2.new(0, sizes.panelWidth, 0, panelHeight), 
+        sizes.isMobile and UDim2.new(0.5, -sizes.panelWidth/2, 0.1, 0) or UDim2.new(1, -sizes.panelWidth - 10, 0.7, -110), 
+        parent, COLORS.Panel, sizes.cornerRadius)
     
     -- Header
-    local header = createFrame("Header", UDim2.new(1, 0, 0, 40), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, 8)
-    local title = createTextLabel("Title", "POSITION SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, 16, true)
+    local header = createFrame("Header", UDim2.new(1, 0, 0, sizes.headerHeight), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, sizes.cornerRadius)
+    local title = createTextLabel("Title", "POSITION SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, sizes.textSize + 2, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
     
     -- Current position label
-    local posLabel = createTextLabel("PositionLabel", "Current Position: "..getgenv().Position, UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 45), gui, 14, false)
+    local posLabel = createTextLabel("PositionLabel", "Current Position: "..getgenv().Position, UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, sizes.headerHeight + 5), gui, sizes.textSize, false)
     
     -- Scroll frame for positions
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, -20, 1, -70)
-    scroll.Position = UDim2.new(0, 10, 0, 70)
+    scroll.Size = UDim2.new(1, -20, 1, -sizes.headerHeight - 30)
+    scroll.Position = UDim2.new(0, 10, 0, sizes.headerHeight + 25)
     scroll.CanvasSize = UDim2.new(0, 0, 0, 300)
     scroll.ScrollBarThickness = 6
     scroll.BackgroundTransparency = 1
@@ -947,7 +1019,7 @@ local function createDropdownUI(parent)
     local positions = {"Back","Left","Right","Mid","UpMid","UpLeft","UpRight","Walk"}
     for i,opt in ipairs(positions) do
         local isSelected = (opt == getgenv().Position)
-        local optBtn = createButton("Pos_"..opt, opt, UDim2.new(1, 0, 0, 26), UDim2.new(0, 0, 0, (i-1)*32), scroll, isSelected, false)
+        local optBtn = createButton("Pos_"..opt, opt, UDim2.new(1, 0, 0, sizes.buttonHeight), UDim2.new(0, 0, 0, (i-1)*(sizes.buttonHeight + 5)), scroll, isSelected, false)
         
         -- Store reference for highlighting
         positionButtons[opt] = optBtn
@@ -970,14 +1042,22 @@ end
 -- MODE SELECTOR (centered buttons + live countdown)
 function showModeSelector(parent)
     if not showModeSelectorToggle then return end
-    local screenGui = createFrame("ModeSelector", UDim2.new(0, 360, 0, 320), UDim2.new(0.5, -180, 0.5, -160), parent, COLORS.Panel, 8)
+    
+    local sizes = getResponsiveSizes()
+    local selectorWidth = sizes.isMobile and sizes.viewportSize.X * 0.9 or 360 * sizes.scaleFactor
+    local selectorHeight = sizes.isMobile and sizes.viewportSize.Y * 0.7 or 380 * sizes.scaleFactor
+    
+    local screenGui = createFrame("ModeSelector", 
+        UDim2.new(0, selectorWidth, 0, selectorHeight), 
+        UDim2.new(0.5, -selectorWidth/2, 0.5, -selectorHeight/2), 
+        parent, COLORS.Panel, sizes.cornerRadius)
 
     -- Header
-    local header = createFrame("Header", UDim2.new(1, 0, 0, 50), UDim2.new(0, 0, 0, 0), screenGui, COLORS.Header, 8)
-    local title = createTextLabel("Title", "SELECT MODE (LAST: "..lastMode:upper()..")", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, 18, true)
+    local header = createFrame("Header", UDim2.new(1, 0, 0, sizes.headerHeight), UDim2.new(0, 0, 0, 0), screenGui, COLORS.Header, sizes.cornerRadius)
+    local title = createTextLabel("Title", "SELECT MODE (LAST: "..lastMode:upper()..")", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, sizes.textSize + 4, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
 
-    timerLabel = createTextLabel("TimerLabel", "AUTOEXEC TIMER: "..autoExecTimer.."S", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, 55), screenGui, 14, false)
+    timerLabel = createTextLabel("TimerLabel", "AUTOEXEC TIMER: "..autoExecTimer.."S", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, sizes.headerHeight + 5), screenGui, sizes.textSize, false)
     timerLabel.TextColor3 = COLORS.TextMuted
 
     if autoExecEnabled then
@@ -996,9 +1076,10 @@ function showModeSelector(parent)
 
     local function makeBtn(name, posY)
         -- All buttons spawn in gray (COLORS.Button)
-        local btn = createButton(name.."Btn", name, UDim2.new(0.8, 0, 0, 50), UDim2.new(0.1, 0, 0, posY), screenGui, false, false)
+        local btnHeight = sizes.isMobile and 60 * sizes.scaleFactor or 50 * sizes.scaleFactor
+        local btn = createButton(name.."Btn", name, UDim2.new(0.8, 0, 0, btnHeight), UDim2.new(0.1, 0, 0, posY), screenGui, false, false)
         btn.Font = Enum.Font.GothamBold
-        btn.TextSize = 16
+        btn.TextSize = sizes.textSize + 2
         btn.BackgroundColor3 = COLORS.Button -- Force gray color
         
         btn.MouseButton1Click:Connect(function()
@@ -1007,14 +1088,17 @@ function showModeSelector(parent)
             hideAllGUIs()
             if name == "Stand" then RunStand()
             elseif name == "Sniper" then RunSniper()
-            elseif name == "Cash" then MoneyFarmScript() end
+            elseif name == "Cash" then MoneyFarmScript()
+            elseif name == "DHC" then RunDHC() end
         end)
         return btn
     end
 
-    makeBtn("Stand", 90)
-    makeBtn("Sniper", 150)
-    makeBtn("Cash", 210)
+    local buttonSpacing = sizes.isMobile and 70 * sizes.scaleFactor or 60 * sizes.scaleFactor
+    makeBtn("Stand", sizes.headerHeight + 30)
+    makeBtn("Sniper", sizes.headerHeight + 30 + buttonSpacing)
+    makeBtn("Cash", sizes.headerHeight + 30 + buttonSpacing * 2)
+    makeBtn("DHC", sizes.headerHeight + 30 + buttonSpacing * 3)
 end
 
 -- EXECUTE ALL
@@ -1022,3 +1106,22 @@ createSettingsUI(mainGui)
 createDropdownUI(mainGui)
 showModeSelector(mainGui)
 if autoExecEnabled then startAutoExec() end
+
+-- Screen resize handler
+local function onScreenResized()
+    -- Remove old UI elements
+    for _,guiName in ipairs({"SettingsPanel","DropdownPanel","ModeSelector"}) do
+        local gui = mainGui:FindFirstChild(guiName)
+        if gui then gui:Destroy() end
+    end
+    
+    -- Recreate UI with new sizes
+    createSettingsUI(mainGui)
+    createDropdownUI(mainGui)
+    showModeSelector(mainGui)
+end
+
+-- Connect resize event if possible
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(onScreenResized)
+end
