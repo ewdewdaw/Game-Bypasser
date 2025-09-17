@@ -1,5 +1,64 @@
-
 -- Money Tracker for Roblox - Executor Version with Loading Screen
+-- Check if already running
+if _G.CartersDHCMoneyTracker then
+    warn("Carter's DHC Money Tracker is already running!")
+    
+    -- Create notification
+    local notifyGui = Instance.new("ScreenGui")
+    notifyGui.Name = "AlreadyRunningNotify"
+    notifyGui.Parent = game:GetService("CoreGui") or game.Players.LocalPlayer:WaitForChild("PlayerGui")
+    
+    local notifyFrame = Instance.new("Frame")
+    notifyFrame.Size = UDim2.new(0, 300, 0, 100)
+    notifyFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
+    notifyFrame.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+    notifyFrame.BorderSizePixel = 0
+    notifyFrame.ZIndex = 1000
+    notifyFrame.Parent = notifyGui
+    
+    local notifyCorner = Instance.new("UICorner")
+    notifyCorner.CornerRadius = UDim.new(0, 12)
+    notifyCorner.Parent = notifyFrame
+    
+    local notifyText = Instance.new("TextLabel")
+    notifyText.Size = UDim2.new(1, -20, 0, 60)
+    notifyText.Position = UDim2.new(0, 10, 0, 10)
+    notifyText.BackgroundTransparency = 1
+    notifyText.Text = "Carter's DHC Money Tracker is already running!"
+    notifyText.TextColor3 = Color3.fromRGB(255, 255, 255)
+    notifyText.Font = Enum.Font.SourceSansBold
+    notifyText.TextSize = 18
+    notifyText.TextWrapped = true
+    notifyText.ZIndex = 1001
+    notifyText.Parent = notifyFrame
+    
+    local okButton = Instance.new("TextButton")
+    okButton.Size = UDim2.new(0, 100, 0, 30)
+    okButton.Position = UDim2.new(0.5, -50, 0, 60)
+    okButton.BackgroundColor3 = Color3.fromRGB(60, 120, 60)
+    okButton.BorderSizePixel = 0
+    okButton.Text = "OK"
+    okButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    okButton.Font = Enum.Font.SourceSansBold
+    okButton.TextSize = 18
+    okButton.ZIndex = 1001
+    okButton.Parent = notifyFrame
+    
+    local okUICorner = Instance.new("UICorner")
+    okUICorner.CornerRadius = UDim.new(0, 8)
+    okUICorner.Parent = okButton
+    
+    okButton.MouseButton1Click:Connect(function()
+        notifyGui:Destroy()
+    end)
+    
+    return
+end
+
+-- Mark as running
+_G.CartersDHCMoneyTracker = true
+
+-- Wait for game to load
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
@@ -11,6 +70,24 @@ local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
 local UserInputService = game:GetService("UserInputService")
 local Lighting = game:GetService("Lighting")
+
+-- Wait until player is out of ForceField (spawn protection)
+local function waitForSpawnProtection()
+    local character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    local humanoid = character:WaitForChild("Humanoid")
+    
+    -- Check for ForceField
+    if character:FindFirstChildOfClass("ForceField") then
+        repeat
+            wait(1)
+        until not character:FindFirstChildOfClass("ForceField") or not character.Parent
+    end
+    
+    return true
+end
+
+-- Wait for spawn protection to end
+waitForSpawnProtection()
 
 -- Create loading screen
 local LoadingGui = Instance.new("ScreenGui")
@@ -705,7 +782,7 @@ function showAlert(player, current, target)
     -- Create alert sound
     if not alertSound then
         alertSound = Instance.new("Sound")
-    alertSound.SoundId = "rbxassetid://9114266661" -- Warning sound
+        alertSound.SoundId = "rbxassetid://9114266661" -- Warning sound
         alertSound.Volume = 0.5
         alertSound.Parent = ScreenGui
     end
@@ -957,11 +1034,11 @@ local function createPlayerButton(player)
     padding.PaddingLeft = UDim.new(0, 10)
     padding.Parent = button
     
-    -- Wait for player's data folder
-    local dataFolder = nil
-    local currency = nil
-    
-    spawn(function()
+    -- Function to update player data with retry mechanism
+    local function updatePlayerData()
+        local dataFolder = nil
+        local currency = nil
+        
         if player ~= LocalPlayer then
             pcall(function()
                 -- Try to find DataFolder in different possible locations
@@ -975,7 +1052,7 @@ local function createPlayerButton(player)
                 end
                 
                 if not dataFolder then
-                    dataFolder = player:WaitForChild("DataFolder", 10)
+                    dataFolder = player:WaitForChild("DataFolder", 5)
                 end
                 
                 if dataFolder then
@@ -1010,12 +1087,53 @@ local function createPlayerButton(player)
                     end
                 end
             end)
+            
+            return true -- Success
         else
             button.Text = player.DisplayName .. " (No data)"
+            return false -- No data found
         end
-    end)
+    end
+    
+    -- Initial attempt to get data
+    local success = updatePlayerData()
+    
+    -- If no data found, set up retry mechanism
+    if not success then
+        spawn(function()
+            while button and button.Parent and not updatePlayerData() do
+                wait(10) -- Wait 10 seconds before retrying
+            end
+        end)
+    end
     
     button.MouseButton1Click:Connect(function()
+        -- Try to get currency data when button is clicked
+        local dataFolder = nil
+        local currency = nil
+        
+        if player ~= LocalPlayer then
+            pcall(function()
+                local character = player.Character
+                if character then
+                    dataFolder = character:FindFirstChild("DataFolder")
+                end
+                
+                if not dataFolder then
+                    dataFolder = player:FindFirstChild("DataFolder")
+                end
+                
+                if dataFolder then
+                    currency = dataFolder:FindFirstChild("Currency")
+                end
+            end)
+        else
+            dataFolder = LocalPlayer:FindFirstChild("DataFolder")
+            if dataFolder then
+                currency = dataFolder:FindFirstChild("Currency")
+            end
+        end
+        
         if currency then
             showPlayerPopup(player, currency)
         else
@@ -1103,7 +1221,7 @@ local function setupMoneyTracking()
         end)
     end
     
-    -- NEW: Set up periodic refresh every 10 seconds
+    -- Set up periodic refresh every 10 seconds
     spawn(function()
         while true do
             wait(10) -- Wait 10 seconds
@@ -1153,7 +1271,7 @@ ScreenGui.Destroying:Connect(function()
     for userId, data in pairs(trackedPlayers) do
         trackedPlayers[userId] = nil
     end
+    _G.CartersDHCMoneyTracker = nil
 end)
 
-warn("Money Tracker loaded successfully!")
-
+warn("Carter's DHC Money Tracker loaded successfully!")
