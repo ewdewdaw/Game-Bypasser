@@ -1,4 +1,4 @@
-getgenv()._ = "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai >.+ | If you pay for this script you get scammed, this script is completely free ok"
+
 
 local OwnerFileName = "OwnerConfig.txt"
 local PositionFileName = "PositionConfig.txt"
