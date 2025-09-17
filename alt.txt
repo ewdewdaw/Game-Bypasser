@@ -9,7 +9,7 @@ local AutoExecEnabledFile = "AutoExecEnabled.txt"
 local ModeToggleFile = "ModeToggle.txt"
 local WebhookFile = "WebhookConfig.txt"
 local MessageWaitFile = "MessageWaitConfig.txt"
-local ServerHopTimeFile = "ServerHopTimeConfig.txt"
+local ServerHopTimeFile = "ServerHopTimeFile.txt"
 
 local function loadSetting(fileName, default)
     if isfile and isfile(fileName) then return readfile(fileName) end
@@ -440,7 +440,7 @@ local function RunStand()
     ['AttackMode'] = 'Sky', --[Sky | Under] If [Sky] The Stand Will Attack Infront Of Target And If [Under] The Stand Will Attack In Underground
     ['CustomName'] = 'a barbershop haircut that costs a quarter', --Custom Name Text Default Is [Master] Example Of it 'Im Here, Master'
     ['Hidescreen'] = true, --[true | false] If you set it to true you will see white blank screen [Save up gpu usage]
-    ['SummonPoses'] = 'Pose2', --[false | Pose1 | Pose2 | Pose3]
+    ['SummonPoses'] = 'Pose2', --[False | Pose1 | Pose2 | Pose3]
     ['LowGraphics'] = true, --[true | false] Turns graphics down so your stand doesnt lag too much
     ['CustomPrefix'] = '.', --[ ! | / | . | ? | > | < | $ | ; | : ] Custom target prefix
     ['CustomSummon'] = 'Summon!', --Custom [Summon!] Text
@@ -650,26 +650,22 @@ local COLORS = {
     Accent = Color3.fromRGB(0, 120, 255)
 }
 
--- Function to get screen size and calculate responsive sizes
-local function getResponsiveSizes()
+-- Function to get screen size and calculate scale factor
+local function getScaleFactor()
     local viewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
-    local isMobile = viewportSize.X < 1000 -- Assume mobile if screen width is less than 1000 pixels
+    local isMobile = viewportSize.X < 1000
     
-    local scaleFactor = math.min(viewportSize.X / 1920, viewportSize.Y / 1080)
-    local mobileScale = math.min(viewportSize.X / 800, viewportSize.Y / 600)
+    -- Calculate scale factor based on screen width
+    local scaleFactor = math.min(viewportSize.X / 1920, 1) -- Max scale factor is 1 (original size)
     
-    return {
-        viewportSize = viewportSize,
-        isMobile = isMobile,
-        scaleFactor = isMobile and mobileScale or scaleFactor,
-        panelWidth = isMobile and viewportSize.X * 0.8 or 280,
-        panelHeight = isMobile and viewportSize.Y * 0.7 or 480,
-        buttonHeight = isMobile and 40 or 30,
-        textSize = isMobile and 14 or 14,
-        headerHeight = isMobile and 40 or 40,
-        cornerRadius = isMobile and 8 or 8,
-        spacing = isMobile and 10 or 10
-    }
+    -- For mobile, scale down more aggressively
+    if isMobile then
+        scaleFactor = math.max(scaleFactor, 0.6) -- Minimum scale factor for mobile
+    else
+        scaleFactor = math.max(scaleFactor, 0.8) -- Minimum scale factor for desktop
+    end
+    
+    return scaleFactor, isMobile
 end
 
 -- Function to create sleek UI elements with proper z-index management
@@ -836,28 +832,37 @@ local positionButtons = {}
 
 -- SETTINGS UI
 local function createSettingsUI(parent)
-    local sizes = getResponsiveSizes()
+    local scaleFactor, isMobile = getScaleFactor()
+    
+    -- Calculate scaled dimensions
+    local panelWidth = 280 * scaleFactor
+    local panelHeight = 480 * scaleFactor
+    local buttonHeight = 30 * scaleFactor
+    local textSize = 14 * scaleFactor
+    local headerHeight = 40 * scaleFactor
+    local cornerRadius = 8 * scaleFactor
+    local spacing = 10 * scaleFactor
+    
     local gui = createFrame("SettingsPanel", 
-        UDim2.new(0, sizes.panelWidth, 0, sizes.panelHeight), 
-        UDim2.new(0, 10, 0.1, 0), 
-        parent, COLORS.Panel, sizes.cornerRadius)
+        UDim2.new(0, panelWidth, 0, panelHeight), 
+        UDim2.new(1, -panelWidth - 10, 0.1, 0), 
+        parent, COLORS.Panel, cornerRadius)
     
     -- Header
-    local header = createFrame("Header", UDim2.new(1, 0, 0, sizes.headerHeight), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, sizes.cornerRadius)
-    local title = createTextLabel("Title", "SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, sizes.textSize + 2, true)
+    local header = createFrame("Header", UDim2.new(1, 0, 0, headerHeight), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, cornerRadius)
+    local title = createTextLabel("Title", "SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, textSize + 2, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
     
     -- Content area
-    local content = createFrame("Content", UDim2.new(1, -20, 1, -sizes.headerHeight - 10), UDim2.new(0, 10, 0, sizes.headerHeight + 5), gui, Color3.fromRGB(0, 0, 0), 0)
+    local content = createFrame("Content", UDim2.new(1, -20, 1, -headerHeight - 10), UDim2.new(0, 10, 0, headerHeight + 5), gui, Color3.fromRGB(0, 0, 0), 0)
     content.BackgroundTransparency = 1
     
     -- Calculate positions
     local yPosition = 0
-    local elementHeight = sizes.buttonHeight
-    local spacing = sizes.spacing
+    local elementHeight = buttonHeight
     
     -- Owner name
-    local nameLabel = createTextLabel("NameLabel", "Owner Username:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
+    local nameLabel = createTextLabel("NameLabel", "Owner Username:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, textSize, false)
     yPosition = yPosition + 20
     local nameBox = createTextBox("OwnerUsername", getgenv().Owner, UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
@@ -871,26 +876,26 @@ local function createSettingsUI(parent)
     yPosition = yPosition + elementHeight + spacing
     
     -- Timer
-    local timerLabel = createTextLabel("TimerLabel", "AutoExec Timer (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
+    local timerLabel = createTextLabel("TimerLabel", "AutoExec Timer (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, textSize, false)
     yPosition = yPosition + 20
     local timerBox = createTextBox("AutoExecTimer", tostring(autoExecTimer), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
     
     -- Webhook
-    local webhookLabel = createTextLabel("WebhookLabel", "Webhook URL:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
+    local webhookLabel = createTextLabel("WebhookLabel", "Webhook URL:", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, textSize, false)
     yPosition = yPosition + 20
     local webhookBox = createTextBox("WebhookURL", truncateText(webhookUrl, 20), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     webhookBox:SetAttribute("FullText", webhookUrl)
     yPosition = yPosition + elementHeight + spacing
     
     -- Message wait
-    local messageWaitLabel = createTextLabel("MessageWaitLabel", "Message Wait (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
+    local messageWaitLabel = createTextLabel("MessageWaitLabel", "Message Wait (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, textSize, false)
     yPosition = yPosition + 20
     local messageWaitBox = createTextBox("MessageWait", tostring(messageWait), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
     
     -- Server hop time
-    local serverHopLabel = createTextLabel("ServerHopLabel", "Server Hop Time (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, sizes.textSize, false)
+    local serverHopLabel = createTextLabel("ServerHopLabel", "Server Hop Time (seconds):", UDim2.new(1, 0, 0, 20), UDim2.new(0, 0, 0, yPosition), content, textSize, false)
     yPosition = yPosition + 20
     local serverHopBox = createTextBox("ServerHopTime", tostring(serverHopTime), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
@@ -898,7 +903,7 @@ local function createSettingsUI(parent)
     -- Save button (with extra space)
     local saveBtn = createButton("SaveButton", "SAVE ALL SETTINGS", UDim2.new(1, 0, 0, elementHeight + 5), UDim2.new(0, 0, 0, yPosition + 10), content, true, false)
     saveBtn.Font = Enum.Font.GothamBold
-    saveBtn.TextSize = sizes.textSize + 1
+    saveBtn.TextSize = textSize + 1
     
     -- Webhook box focus events
     webhookBox.Focused:Connect(function()
@@ -992,25 +997,33 @@ end
 
 -- DROPDOWN UI (Positions)
 local function createDropdownUI(parent)
-    local sizes = getResponsiveSizes()
-    local panelHeight = 220
+    local scaleFactor, isMobile = getScaleFactor()
+    
+    -- Calculate scaled dimensions
+    local panelWidth = 280 * scaleFactor
+    local panelHeight = 220 * scaleFactor
+    local buttonHeight = 26 * scaleFactor
+    local textSize = 14 * scaleFactor
+    local headerHeight = 40 * scaleFactor
+    local cornerRadius = 8 * scaleFactor
+    
     local gui = createFrame("DropdownPanel", 
-        UDim2.new(0, sizes.panelWidth, 0, panelHeight), 
-        UDim2.new(0, 10, 0.7, -110), 
-        parent, COLORS.Panel, sizes.cornerRadius)
+        UDim2.new(0, panelWidth, 0, panelHeight), 
+        UDim2.new(1, -panelWidth - 10, 0.7, -110), 
+        parent, COLORS.Panel, cornerRadius)
     
     -- Header
-    local header = createFrame("Header", UDim2.new(1, 0, 0, sizes.headerHeight), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, sizes.cornerRadius)
-    local title = createTextLabel("Title", "POSITION SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, sizes.textSize + 2, true)
+    local header = createFrame("Header", UDim2.new(1, 0, 0, headerHeight), UDim2.new(0, 0, 0, 0), gui, COLORS.Header, cornerRadius)
+    local title = createTextLabel("Title", "POSITION SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, textSize + 2, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
     
     -- Current position label
-    local posLabel = createTextLabel("PositionLabel", "Current Position: "..getgenv().Position, UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, sizes.headerHeight + 5), gui, sizes.textSize, false)
+    local posLabel = createTextLabel("PositionLabel", "Current Position: "..getgenv().Position, UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, headerHeight + 5), gui, textSize, false)
     
     -- Scroll frame for positions
     local scroll = Instance.new("ScrollingFrame")
-    scroll.Size = UDim2.new(1, -20, 1, -sizes.headerHeight - 30)
-    scroll.Position = UDim2.new(0, 10, 0, sizes.headerHeight + 25)
+    scroll.Size = UDim2.new(1, -20, 1, -headerHeight - 30)
+    scroll.Position = UDim2.new(0, 10, 0, headerHeight + 25)
     scroll.CanvasSize = UDim2.new(0, 0, 0, 300)
     scroll.ScrollBarThickness = 6
     scroll.BackgroundTransparency = 1
@@ -1020,7 +1033,7 @@ local function createDropdownUI(parent)
     local positions = {"Back","Left","Right","Mid","UpMid","UpLeft","UpRight","Walk"}
     for i,opt in ipairs(positions) do
         local isSelected = (opt == getgenv().Position)
-        local optBtn = createButton("Pos_"..opt, opt, UDim2.new(1, 0, 0, sizes.buttonHeight), UDim2.new(0, 0, 0, (i-1)*(sizes.buttonHeight + 5)), scroll, isSelected, false)
+        local optBtn = createButton("Pos_"..opt, opt, UDim2.new(1, 0, 0, buttonHeight), UDim2.new(0, 0, 0, (i-1)*32), scroll, isSelected, false)
         
         -- Store reference for highlighting
         positionButtons[opt] = optBtn
@@ -1044,21 +1057,27 @@ end
 function showModeSelector(parent)
     if not showModeSelectorToggle then return end
     
-    local sizes = getResponsiveSizes()
-    local selectorWidth = 360
-    local selectorHeight = 380
+    local scaleFactor, isMobile = getScaleFactor()
+    
+    -- Calculate scaled dimensions
+    local selectorWidth = 360 * scaleFactor
+    local selectorHeight = 380 * scaleFactor
+    local buttonHeight = 50 * scaleFactor
+    local textSize = 14 * scaleFactor
+    local headerHeight = 50 * scaleFactor
+    local cornerRadius = 8 * scaleFactor
     
     local screenGui = createFrame("ModeSelector", 
         UDim2.new(0, selectorWidth, 0, selectorHeight), 
         UDim2.new(0.5, -selectorWidth/2, 0.5, -selectorHeight/2), 
-        parent, COLORS.Panel, sizes.cornerRadius)
+        parent, COLORS.Panel, cornerRadius)
 
     -- Header
-    local header = createFrame("Header", UDim2.new(1, 0, 0, sizes.headerHeight), UDim2.new(0, 0, 0, 0), screenGui, COLORS.Header, sizes.cornerRadius)
-    local title = createTextLabel("Title", "SELECT MODE (LAST: "..lastMode:upper()..")", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, sizes.textSize + 4, true)
+    local header = createFrame("Header", UDim2.new(1, 0, 0, headerHeight), UDim2.new(0, 0, 0, 0), screenGui, COLORS.Header, cornerRadius)
+    local title = createTextLabel("Title", "SELECT MODE (LAST: "..lastMode:upper()..")", UDim2.new(1, 0, 1, 0), UDim2.new(0, 15, 0, 0), header, textSize + 4, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
 
-    timerLabel = createTextLabel("TimerLabel", "AUTOEXEC TIMER: "..autoExecTimer.."S", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, sizes.headerHeight + 5), screenGui, sizes.textSize, false)
+    timerLabel = createTextLabel("TimerLabel", "AUTOEXEC TIMER: "..autoExecTimer.."S", UDim2.new(1, -20, 0, 20), UDim2.new(0, 10, 0, headerHeight + 5), screenGui, textSize, false)
     timerLabel.TextColor3 = COLORS.TextMuted
 
     if autoExecEnabled then
@@ -1077,10 +1096,9 @@ function showModeSelector(parent)
 
     local function makeBtn(name, posY)
         -- All buttons spawn in gray (COLORS.Button)
-        local btnHeight = 50
-        local btn = createButton(name.."Btn", name, UDim2.new(0.8, 0, 0, btnHeight), UDim2.new(0.1, 0, 0, posY), screenGui, false, false)
+        local btn = createButton(name.."Btn", name, UDim2.new(0.8, 0, 0, buttonHeight), UDim2.new(0.1, 0, 0, posY), screenGui, false, false)
         btn.Font = Enum.Font.GothamBold
-        btn.TextSize = sizes.textSize + 2
+        btn.TextSize = textSize + 2
         btn.BackgroundColor3 = COLORS.Button -- Force gray color
         
         btn.MouseButton1Click:Connect(function()
@@ -1095,11 +1113,11 @@ function showModeSelector(parent)
         return btn
     end
 
-    local buttonSpacing = 60
-    makeBtn("Stand", sizes.headerHeight + 30)
-    makeBtn("Sniper", sizes.headerHeight + 30 + buttonSpacing)
-    makeBtn("Cash", sizes.headerHeight + 30 + buttonSpacing * 2)
-    makeBtn("DHC", sizes.headerHeight + 30 + buttonSpacing * 3)
+    local buttonSpacing = 60 * scaleFactor
+    makeBtn("Stand", headerHeight + 30)
+    makeBtn("Sniper", headerHeight + 30 + buttonSpacing)
+    makeBtn("Cash", headerHeight + 30 + buttonSpacing * 2)
+    makeBtn("DHC", headerHeight + 30 + buttonSpacing * 3)
 end
 
 -- EXECUTE ALL
@@ -1107,3 +1125,22 @@ createSettingsUI(mainGui)
 createDropdownUI(mainGui)
 showModeSelector(mainGui)
 if autoExecEnabled then startAutoExec() end
+
+-- Screen resize handler
+local function onScreenResized()
+    -- Remove old UI elements
+    for _,guiName in ipairs({"SettingsPanel","DropdownPanel","ModeSelector"}) do
+        local gui = mainGui:FindFirstChild(guiName)
+        if gui then gui:Destroy() end
+    end
+    
+    -- Recreate UI with new sizes
+    createSettingsUI(mainGui)
+    createDropdownUI(mainGui)
+    showModeSelector(mainGui)
+end
+
+-- Connect resize event if possible
+if workspace.CurrentCamera then
+    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(onScreenResized)
+end
