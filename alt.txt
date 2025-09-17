@@ -525,7 +525,7 @@ local function startAutoExec()
         elseif lastMode == "DHC" then
             RunDHC()
         end
-    end)
+    end
 end
 
 local COLORS = {
@@ -712,6 +712,42 @@ local mainGui = createMainGUI()
 
 local timerLabel = nil
 local positionButtons = {}
+
+local function checkOverlap(panel1, panel2)
+    if not panel1 or not panel2 then return false end
+    
+    local pos1 = panel1.AbsolutePosition
+    local size1 = panel1.AbsoluteSize
+    local pos2 = panel2.AbsolutePosition
+    local size2 = panel2.AbsoluteSize
+    
+    return not (pos1.X + size1.X < pos2.X or 
+               pos1.X > pos2.X + size2.X or 
+               pos1.Y + size1.Y < pos2.Y or 
+               pos1.Y > pos2.Y + size2.Y)
+end
+
+local function adjustPanelPositions()
+    local settingsPanel = mainGui:FindFirstChild("SettingsPanel")
+    local positionPanel = mainGui:FindFirstChild("DropdownPanel")
+    
+    if not settingsPanel or not positionPanel then return end
+    
+    local viewportSize = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(1920, 1080)
+    
+    if checkOverlap(settingsPanel, positionPanel) then
+        local settingsPos = settingsPanel.Position
+        local positionPos = positionPanel.Position
+        
+        if viewportSize.Y < 700 then
+            positionPanel.Position = UDim2.new(positionPos.X.Scale, positionPos.X.Offset, 
+                                              settingsPos.Y.Scale, settingsPos.Y.Offset + settingsPanel.AbsoluteSize.Y + 10)
+        else
+            settingsPanel.Position = UDim2.new(settingsPos.X.Scale, settingsPos.X.Offset, 0.02, 0)
+            positionPanel.Position = UDim2.new(positionPos.X.Scale, positionPos.X.Offset, 0.02 + 0.35, 0)
+        end
+    end
+end
 
 local function createSettingsUI(parent)
     local viewportSize, isMobile, scaleFactor = getScreenInfo()
@@ -985,6 +1021,12 @@ end
 createSettingsUI(mainGui)
 createDropdownUI(mainGui)
 showModeSelector(mainGui)
+
+task.spawn(function()
+    wait(0.5)
+    adjustPanelPositions()
+end)
+
 if autoExecEnabled then startAutoExec() end
 
 local function onScreenResized()
@@ -996,6 +1038,11 @@ local function onScreenResized()
     createSettingsUI(mainGui)
     createDropdownUI(mainGui)
     showModeSelector(mainGui)
+    
+    task.spawn(function()
+        wait(0.5)
+        adjustPanelPositions()
+    end)
 end
 
 if workspace.CurrentCamera then
