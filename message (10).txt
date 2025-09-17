@@ -1,4 +1,3 @@
-make it so money counter refresehs every 10 seconds also its Carters DHC
 
 -- Money Tracker for Roblox - Executor Version with Loading Screen
 if not game:IsLoaded() then
@@ -1157,3 +1156,4 @@ ScreenGui.Destroying:Connect(function()
 end)
 
 warn("Money Tracker loaded successfully!")
+
