@@ -517,7 +517,7 @@ local function RunSniper()
 
         ['AuraRange'] = 25, --Range on how far will be the kill aura
 
-        ['CcrewID'] = 7, --Crew id, preferable to be in both same crew alt/main
+        ['CcrewID'] = 7, --Ccrew id, preferable to be in both same crew alt/main
         ['VoidView'] = true, --Puts urs camera to void, gradually increasing ur fps
         ['AntiStomp'] = true, --Self explainatory
         ['HideScreen'] = true, --Boost fps and lowered cpu consumption, recomended
@@ -656,18 +656,19 @@ local function getResponsiveSizes()
     local isMobile = viewportSize.X < 1000 -- Assume mobile if screen width is less than 1000 pixels
     
     local scaleFactor = math.min(viewportSize.X / 1920, viewportSize.Y / 1080)
+    local mobileScale = math.min(viewportSize.X / 800, viewportSize.Y / 600)
     
     return {
         viewportSize = viewportSize,
         isMobile = isMobile,
-        scaleFactor = scaleFactor,
-        panelWidth = isMobile and viewportSize.X * 0.9 or 280 * scaleFactor,
-        panelHeight = isMobile and viewportSize.Y * 0.8 or 480 * scaleFactor,
-        buttonHeight = isMobile and 50 * scaleFactor or 30 * scaleFactor,
-        textSize = isMobile and 16 * scaleFactor or 14 * scaleFactor,
-        headerHeight = isMobile and 50 * scaleFactor or 40 * scaleFactor,
-        cornerRadius = isMobile and 12 or 8,
-        spacing = isMobile and 15 * scaleFactor or 10 * scaleFactor
+        scaleFactor = isMobile and mobileScale or scaleFactor,
+        panelWidth = isMobile and viewportSize.X * 0.8 or 280,
+        panelHeight = isMobile and viewportSize.Y * 0.7 or 480,
+        buttonHeight = isMobile and 40 or 30,
+        textSize = isMobile and 14 or 14,
+        headerHeight = isMobile and 40 or 40,
+        cornerRadius = isMobile and 8 or 8,
+        spacing = isMobile and 10 or 10
     }
 end
 
@@ -833,12 +834,12 @@ local timerLabel = nil
 -- Store references to position buttons for highlighting
 local positionButtons = {}
 
--- SETTINGS UI (EXTENDED TO FIT SAVE BUTTON)
+-- SETTINGS UI
 local function createSettingsUI(parent)
     local sizes = getResponsiveSizes()
     local gui = createFrame("SettingsPanel", 
         UDim2.new(0, sizes.panelWidth, 0, sizes.panelHeight), 
-        sizes.isMobile and UDim2.new(0.5, -sizes.panelWidth/2, 0.5, -sizes.panelHeight/2) or UDim2.new(1, -sizes.panelWidth - 10, 0.1, 0), 
+        UDim2.new(0, 10, 0.1, 0), 
         parent, COLORS.Panel, sizes.cornerRadius)
     
     -- Header
@@ -992,10 +993,10 @@ end
 -- DROPDOWN UI (Positions)
 local function createDropdownUI(parent)
     local sizes = getResponsiveSizes()
-    local panelHeight = sizes.isMobile and sizes.panelHeight * 0.6 or 220
+    local panelHeight = 220
     local gui = createFrame("DropdownPanel", 
         UDim2.new(0, sizes.panelWidth, 0, panelHeight), 
-        sizes.isMobile and UDim2.new(0.5, -sizes.panelWidth/2, 0.1, 0) or UDim2.new(1, -sizes.panelWidth - 10, 0.7, -110), 
+        UDim2.new(0, 10, 0.7, -110), 
         parent, COLORS.Panel, sizes.cornerRadius)
     
     -- Header
@@ -1044,8 +1045,8 @@ function showModeSelector(parent)
     if not showModeSelectorToggle then return end
     
     local sizes = getResponsiveSizes()
-    local selectorWidth = sizes.isMobile and sizes.viewportSize.X * 0.9 or 360 * sizes.scaleFactor
-    local selectorHeight = sizes.isMobile and sizes.viewportSize.Y * 0.7 or 380 * sizes.scaleFactor
+    local selectorWidth = 360
+    local selectorHeight = 380
     
     local screenGui = createFrame("ModeSelector", 
         UDim2.new(0, selectorWidth, 0, selectorHeight), 
@@ -1076,7 +1077,7 @@ function showModeSelector(parent)
 
     local function makeBtn(name, posY)
         -- All buttons spawn in gray (COLORS.Button)
-        local btnHeight = sizes.isMobile and 60 * sizes.scaleFactor or 50 * sizes.scaleFactor
+        local btnHeight = 50
         local btn = createButton(name.."Btn", name, UDim2.new(0.8, 0, 0, btnHeight), UDim2.new(0.1, 0, 0, posY), screenGui, false, false)
         btn.Font = Enum.Font.GothamBold
         btn.TextSize = sizes.textSize + 2
@@ -1094,7 +1095,7 @@ function showModeSelector(parent)
         return btn
     end
 
-    local buttonSpacing = sizes.isMobile and 70 * sizes.scaleFactor or 60 * sizes.scaleFactor
+    local buttonSpacing = 60
     makeBtn("Stand", sizes.headerHeight + 30)
     makeBtn("Sniper", sizes.headerHeight + 30 + buttonSpacing)
     makeBtn("Cash", sizes.headerHeight + 30 + buttonSpacing * 2)
@@ -1106,22 +1107,3 @@ createSettingsUI(mainGui)
 createDropdownUI(mainGui)
 showModeSelector(mainGui)
 if autoExecEnabled then startAutoExec() end
-
--- Screen resize handler
-local function onScreenResized()
-    -- Remove old UI elements
-    for _,guiName in ipairs({"SettingsPanel","DropdownPanel","ModeSelector"}) do
-        local gui = mainGui:FindFirstChild(guiName)
-        if gui then gui:Destroy() end
-    end
-    
-    -- Recreate UI with new sizes
-    createSettingsUI(mainGui)
-    createDropdownUI(mainGui)
-    showModeSelector(mainGui)
-end
-
--- Connect resize event if possible
-if workspace.CurrentCamera then
-    workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(onScreenResized)
-end
