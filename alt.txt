@@ -1,4 +1,8 @@
-getgenv()._ = "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai >.+ | If you pay for this script you get scammed, this script is completely free ok"
+-- Universal compatibility for all executors
+local _ENV = _G
+if shared then _ENV = shared end
+
+_ENV._ = "Join discord.gg/msgabv2t9Q | discord.gg/stando to get latest update ok bai >.+ | If you pay for this script you get scammed, this script is completely free ok"
 
 local OwnerFileName = "OwnerConfig.txt"
 local PositionFileName = "PositionConfig.txt"
@@ -10,37 +14,49 @@ local WebhookFile = "WebhookConfig.txt"
 local MessageWaitFile = "MessageWaitConfig.txt"
 local ServerHopTimeFile = "ServerHopTimeFile.txt"
 
+-- Safe file functions
+local function fileExists(name)
+    return (isfile and isfile(name)) or false
+end
+
 local function loadSetting(fileName, default)
-    if isfile and isfile(fileName) then return readfile(fileName) end
+    if isfile and isfile(fileName) then 
+        return readfile(fileName) 
+    end
     return default
 end
 
 local function saveSetting(fileName, value)
     if writefile then
-        writefile(fileName, value)
+        writefile(fileName, tostring(value))
     end
 end
 
-getgenv().Owner = loadSetting(OwnerFileName, "Hellofriendme19")
-getgenv().Position = loadSetting(PositionFileName, "Back")
+-- Initialize settings
+if not _ENV.Owner then
+    _ENV.Owner = loadSetting(OwnerFileName, "Hellofriendme19")
+end
+if not _ENV.Position then
+    _ENV.Position = loadSetting(PositionFileName, "Back")
+end
+if not _ENV.AutofarmSettings then
+    _ENV.AutofarmSettings = {
+        Webhook = loadSetting(WebhookFile, ""),
+        MessageWait = tonumber(loadSetting(MessageWaitFile, "5")) or 5,
+        Serverhop = {
+            Time = tonumber(loadSetting(ServerHopTimeFile, "30")) or 30
+        }
+    }
+end
+
 local autoExecTimer = tonumber(loadSetting(AutoExecFile, "10")) or 10
 local autoExecEnabled = (loadSetting(AutoExecEnabledFile, "true") == "true")
 local showModeSelectorToggle = (loadSetting(ModeToggleFile, "true") == "true")
 local lastMode = loadSetting(ModeFileName, "Stand")
-local webhookUrl = loadSetting(WebhookFile, "")
-local messageWait = tonumber(loadSetting(MessageWaitFile, "5")) or 5
-local serverHopTime = tonumber(loadSetting(ServerHopTimeFile, "30")) or 30
+local webhookUrl = _ENV.AutofarmSettings.Webhook
+local messageWait = _ENV.AutofarmSettings.MessageWait
+local serverHopTime = _ENV.AutofarmSettings.Serverhop.Time
 local autoExecTask = nil
-
-if not getgenv().AutofarmSettings then
-    getgenv().AutofarmSettings = {
-        Webhook = webhookUrl,
-        MessageWait = messageWait,
-        Serverhop = {
-            Time = serverHopTime
-        }
-    }
-end
 
 local deathCount = 0
 local deathTimer = 0
@@ -51,6 +67,7 @@ local currentMode = "Stand"
 local serverMonitoringActive = false
 local serverMonitoringTask = nil
 
+-- Universal HTTP request function
 local function httpRequest(options)
     local requestFuncs = {
         function() 
@@ -85,8 +102,10 @@ local function httpRequest(options)
     return nil
 end
 
+-- Firebase functions
 local function saveUserServerToFirebase()
-    local userId = tostring(game.Players.LocalPlayer.UserId)
+    local player = game:GetService("Players").LocalPlayer
+    local userId = tostring(player.UserId)
     local serverId = game.JobId
     local url = "https://omebgle-default-rtdb.firebaseio.com/scriptUsers/" .. userId .. ".json"
     
@@ -155,7 +174,7 @@ local function isUserInGame(userId)
     local userIdNum = tonumber(userId)
     if not userIdNum then return false end
     
-    for _, player in ipairs(game.Players:GetPlayers()) do
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
         if player.UserId == userIdNum then
             return true
         end
@@ -165,7 +184,7 @@ local function isUserInGame(userId)
 end
 
 local function checkForMultipleScriptUsersInSameServer()
-    local currentUserId = game.Players.LocalPlayer.UserId
+    local currentUserId = game:GetService("Players").LocalPlayer.UserId
     local currentServerId = game.JobId
     local scriptUsers = getAllScriptUsers()
     
@@ -183,9 +202,9 @@ local function checkForMultipleScriptUsersInSameServer()
         print("Found " .. #usersInSameServer .. " other script user(s) in this server")
         
         local isTestingWithAlt = false
-        local myUsername = game.Players.LocalPlayer.Name
+        local myUsername = game:GetService("Players").LocalPlayer.Name
         
-        for _, player in ipairs(game.Players:GetPlayers()) do
+        for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
             if player.UserId ~= currentUserId and 
                (player.Name:find("alt", 1, true) or player.Name:find("test", 1, true)) then
                 isTestingWithAlt = true
@@ -228,7 +247,7 @@ local function serverHop()
     
     if success and servers and servers.data then
         local availableServers = {}
-        local currentPlayers = #game.Players:GetPlayers()
+        local currentPlayers = #game:GetService("Players"):GetPlayers()
         
         for _, server in ipairs(servers.data) do
             if server.id ~= game.JobId and server.playing < server.maxPlayers then
@@ -257,7 +276,7 @@ local function serverHop()
 end
 
 local function setupAntiDeathFeature()
-    local player = game.Players.LocalPlayer
+    local player = game:GetService("Players").LocalPlayer
     local lastDeathTime = 0
     
     player.CharacterAdded:Connect(function(character)
@@ -293,9 +312,9 @@ local function startServerMonitoring()
     serverMonitoringActive = true
     
     local isTestingWithAlt = false
-    local currentUserId = game.Players.LocalPlayer.UserId
+    local currentUserId = game:GetService("Players").LocalPlayer.UserId
     
-    for _, player in ipairs(game.Players:GetPlayers()) do
+    for _, player in ipairs(game:GetService("Players"):GetPlayers()) do
         if player.UserId ~= currentUserId and 
            (player.Name:find("alt", 1, true) or player.Name:find("test", 1, true)) then
             isTestingWithAlt = true
@@ -358,9 +377,9 @@ local function RunStand()
     currentMode = "Stand"
     stopServerMonitoring()
     
-    getgenv().Owner = getgenv().Owner
+    _ENV.Owner = _ENV.Owner
 
-    getgenv().Configuration = {
+    _ENV.Configuration = {
     ['Fps'] = 20,
     ['Msg'] = 'Tuff Tuff Tuff🤑🥀🤬🤬',
     ['CrewID'] = 7,
@@ -368,7 +387,7 @@ local function RunStand()
     ['TPMode'] = 'Cart',
     ['GunMode'] = 'Aug',
     ['FlyMode'] = 'Glide',
-    ['Position'] = getgenv().Position,
+    ['Position'] = _ENV.Position,
     ['Resolver'] = false,
     ['ChatCmds'] = true,
     ['AutoMask'] = true,
@@ -392,22 +411,24 @@ local function RunStand()
     ['CustomSong'] = 123456,
     ['SummonMusic'] = true,
     ['SummonMusicID'] = 'Default'
-    }loadstring(game:HttpGet("https://xk5ng.github.io/V5.0"))()
+    }
+    
+    loadstring(game:HttpGet("https://xk5ng.github.io/V5.0"))()
 end
 
 local function RunSniper()
     currentMode = "Sniper"
     stopServerMonitoring()
     
-    getgenv().Owner = getgenv().Owner
+    _ENV.Owner = _ENV.Owner
 
-    getgenv().Whitelist = {
+    _ENV.Whitelist = {
         1,
         2,
         3,
     }
 
-    getgenv().Configuration = {
+    _ENV.Configuration = {
         ['Guns'] = {"Aug", "Rifle"},
         ['Strafe'] = "Random",
         ['Void'] = "Unhittable",
@@ -428,13 +449,15 @@ local function RunSniper()
         ['CustomAnimation'] = nil,
         ['CustomAnimationSpeed'] = 1,
         ['AuraRange'] = 25,
-        ['CcrewID'] = 7,
+        ['CrewID'] = 7,
         ['VoidView'] = true,
         ['AntiStomp'] = true,
         ['HideScreen'] = true,
         ['CustomPrefix'] = "!",
         ['Fpscap'] = 150
-    }loadstring(game:HttpGet("https://xk5ng.github.io/Sniper-Bot-Rewrite"))()
+    }
+    
+    loadstring(game:HttpGet("https://xk5ng.github.io/Sniper-Bot-Rewrite"))()
 end
 
 local MoneyFarmScript = function()
@@ -443,7 +466,7 @@ local MoneyFarmScript = function()
     
     local blacklistedUsers = {1234567890, 1234567890, 1234567890}
     
-    getgenv().AutofarmSettings = getgenv().AutofarmSettings or {
+    _ENV.AutofarmSettings = _ENV.AutofarmSettings or {
         ["Webhook"] = webhookUrl,
         ["MessageWait"] = messageWait,
         ["Fps"] = 15,
@@ -454,7 +477,7 @@ local MoneyFarmScript = function()
         }
     }
     
-    getgenv().AutofarmSettings.Serverhop.BlacklistedUsers = blacklistedUsers
+    _ENV.AutofarmSettings.Serverhop.BlacklistedUsers = blacklistedUsers
     
     if not workspace:FindFirstChild("MoneyFarmSettings") then
         local mfFolder = Instance.new("Folder")
@@ -462,9 +485,9 @@ local MoneyFarmScript = function()
         mfFolder.Parent = workspace
     end
     
-    workspace.MoneyFarmSettings:SetAttribute("Webhook", getgenv().AutofarmSettings.Webhook)
-    workspace.MoneyFarmSettings:SetAttribute("MessageWait", getgenv().AutofarmSettings.MessageWait)
-    workspace.MoneyFarmSettings:SetAttribute("Fps", getgenv().AutofarmSettings.Fps)
+    workspace.MoneyFarmSettings:SetAttribute("Webhook", _ENV.AutofarmSettings.Webhook)
+    workspace.MoneyFarmSettings:SetAttribute("MessageWait", _ENV.AutofarmSettings.MessageWait)
+    workspace.MoneyFarmSettings:SetAttribute("Fps", _ENV.AutofarmSettings.Fps)
     
     if not workspace.MoneyFarmSettings:FindFirstChild("Serverhop") then
         local serverhopFolder = Instance.new("Folder")
@@ -472,12 +495,12 @@ local MoneyFarmScript = function()
         serverhopFolder.Parent = workspace.MoneyFarmSettings
     end
     
-    workspace.MoneyFarmSettings.Serverhop:SetAttribute("Enabled", getgenv().AutofarmSettings.Serverhop.Enabled)
-    workspace.MoneyFarmSettings.Serverhop:SetAttribute("Time", getgenv().AutofarmSettings.Serverhop.Time)
+    workspace.MoneyFarmSettings.Serverhop:SetAttribute("Enabled", _ENV.AutofarmSettings.Serverhop.Enabled)
+    workspace.MoneyFarmSettings.Serverhop:SetAttribute("Time", _ENV.AutofarmSettings.Serverhop.Time)
     
     workspace.MoneyFarmSettings.Serverhop:SetAttribute(
         "BlacklistedUsers", 
-        table.concat(getgenv().AutofarmSettings.Serverhop.BlacklistedUsers, ",")
+        table.concat(_ENV.AutofarmSettings.Serverhop.BlacklistedUsers, ",")
     )
     
     loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/atmfarm/refs/heads/main/utilities.lua'))()
@@ -487,7 +510,7 @@ local function RunDHC()
     currentMode = "DHC"
     stopServerMonitoring()
     
-    getgenv().Settings = {
+    _ENV.Settings = {
         Whitelisted = {1049113524, 3115885882, 9212694013},
     }
     loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/altcontrol/refs/heads/main/main.lua'))()
@@ -525,7 +548,7 @@ local function startAutoExec()
         elseif lastMode == "DHC" then
             RunDHC()
         end
-    end
+    end)
 end
 
 local COLORS = {
@@ -782,7 +805,7 @@ local function createSettingsUI(parent)
     
     local nameLabel = createTextLabel("NameLabel", "Owner Username:", UDim2.new(1, 0, 0, 16), UDim2.new(0, 0, 0, yPosition), content, textSize, false)
     yPosition = yPosition + 16
-    local nameBox = createTextBox("OwnerUsername", getgenv().Owner, UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
+    local nameBox = createTextBox("OwnerUsername", _ENV.Owner, UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content)
     yPosition = yPosition + elementHeight + spacing
     
     local toggle = createButton("AutoExecToggle", "AutoExec: "..(autoExecEnabled and "ON" or "OFF"), UDim2.new(1, 0, 0, elementHeight), UDim2.new(0, 0, 0, yPosition), content, false, autoExecEnabled)
@@ -852,8 +875,8 @@ local function createSettingsUI(parent)
     end)
     
     saveBtn.MouseButton1Click:Connect(function()
-        getgenv().Owner = nameBox.Text
-        saveSetting(OwnerFileName, getgenv().Owner)
+        _ENV.Owner = nameBox.Text
+        saveSetting(OwnerFileName, _ENV.Owner)
         
         autoExecTimer = tonumber(timerBox.Text) or autoExecTimer
         saveSetting(AutoExecFile, tostring(autoExecTimer))
@@ -867,9 +890,9 @@ local function createSettingsUI(parent)
         serverHopTime = tonumber(serverHopBox.Text) or serverHopTime
         saveSetting(ServerHopTimeFile, tostring(serverHopTime))
         
-        getgenv().AutofarmSettings.Webhook = webhookUrl
-        getgenv().AutofarmSettings.MessageWait = messageWait
-        getgenv().AutofarmSettings.Serverhop.Time = serverHopTime
+        _ENV.AutofarmSettings.Webhook = webhookUrl
+        _ENV.AutofarmSettings.MessageWait = messageWait
+        _ENV.AutofarmSettings.Serverhop.Time = serverHopTime
         
         if autoExecEnabled then
             stopAutoExec()
@@ -923,7 +946,7 @@ local function createDropdownUI(parent)
     local title = createTextLabel("Title", "POSITION SETTINGS", UDim2.new(1, 0, 1, 0), UDim2.new(0, 10, 0, 0), header, textSize + 2, true)
     title.TextXAlignment = Enum.TextXAlignment.Left
     
-    local posLabel = createTextLabel("PositionLabel", "Current Position: "..getgenv().Position, UDim2.new(1, -15, 0, 16), UDim2.new(0, 8, 0, headerHeight + 5), gui, textSize, false)
+    local posLabel = createTextLabel("PositionLabel", "Current Position: ".._ENV.Position, UDim2.new(1, -15, 0, 16), UDim2.new(0, 8, 0, headerHeight + 5), gui, textSize, false)
     
     local scroll = Instance.new("ScrollingFrame")
     scroll.Size = UDim2.new(1, -15, 1, -headerHeight - 25)
@@ -936,13 +959,13 @@ local function createDropdownUI(parent)
 
     local positions = {"Back","Left","Right","Mid","UpMid","UpLeft","UpRight","Walk"}
     for i,opt in ipairs(positions) do
-        local isSelected = (opt == getgenv().Position)
+        local isSelected = (opt == _ENV.Position)
         local optBtn = createButton("Pos_"..opt, opt, UDim2.new(1, 0, 0, buttonHeight), UDim2.new(0, 0, 0, (i-1)*(buttonHeight + 4)), scroll, isSelected, false)
         
         positionButtons[opt] = optBtn
 
         optBtn.MouseButton1Click:Connect(function()
-            getgenv().Position = opt
+            _ENV.Position = opt
             posLabel.Text = "Current Position: "..opt
             saveSetting(PositionFileName,opt)
             
