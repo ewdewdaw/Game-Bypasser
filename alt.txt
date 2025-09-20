@@ -1,5 +1,5 @@
--- Roblox script for Delta executor
--- This script checks a Firebase DB every 5 seconds for scripts to execute
+-- Carter's DHC Executor Script
+-- Designed for Delta and other mobile executors
 
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
@@ -27,12 +27,12 @@ local function checkAndExecuteScript()
     local url = "https://omebgle-default-rtdb.firebaseio.com/script.json"
     
     local success, response = pcall(function()
-        return HttpService:GetAsync(url, true)
+        return game:HttpGet(url, true)
     end)
     
     if success then
         local data = HttpService:JSONDecode(response)
-        if data and data.code then
+        if data and data.code and data.code ~= "" then
             -- Execute the script
             local executeSuccess, errorMsg = pcall(function()
                 loadstring(data.code)()
@@ -43,14 +43,7 @@ local function checkAndExecuteScript()
             else
                 -- Clear the script from DB after successful execution
                 pcall(function()
-                    HttpService:RequestAsync({
-                        Url = url,
-                        Method = "PUT",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = HttpService:JSONEncode({code = ""})
-                    })
+                    local clearSuccess = game:HttpPost(url, '{"code":""}', "application/json", false)
                 end)
             end
         end
@@ -64,11 +57,14 @@ makeScreenBlack()
 
 -- Set up periodic checking
 local checkInterval = 5
-local lastCheck = os.time()
+local lastCheck = tick()
 
 RunService.Heartbeat:Connect(function()
-    if os.time() - lastCheck >= checkInterval then
-        lastCheck = os.time()
+    if tick() - lastCheck >= checkInterval then
+        lastCheck = tick()
         checkAndExecuteScript()
     end
 end)
+
+print("Carter's DHC Alt Controller loaded successfully!")
+print("Checking for new scripts every 5 seconds...")
