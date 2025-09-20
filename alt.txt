@@ -22,6 +22,15 @@ end
 -- NEW: Command workspace system
 local commandWorkspace = {}
 
+-- NEW: Alt configuration
+local altConfig = {
+    avoidDuplicates = true,
+    deathProtection = true,
+    deathCount = 0,
+    deathTimer = 0,
+    knownUsers = {}
+}
+
 -- Function to check and execute scripts from Firebase with workspace system
 local function checkAndExecuteScript()
     local url = "https://omebgle-default-rtdb.firebaseio.com/script.json"
@@ -232,6 +241,58 @@ local function serverHop()
     end
 end
 
+-- NEW: Check for duplicate script users
+local function checkForDuplicateUsers()
+    if not altConfig.avoidDuplicates then return end
+    
+    local players = game.Players:GetPlayers()
+    local currentUserId = game.Players.LocalPlayer.UserId
+    
+    for _, player in ipairs(players) do
+        if player.UserId ~= currentUserId and not altConfig.knownUsers[player.UserId] then
+            -- Check if this player is also running our script
+            local success = pcall(function()
+                -- This is a simple check - you might want to implement a more robust method
+                if player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("BlackScreenGui") then
+                    warn("Duplicate script user detected: " .. player.Name)
+                    serverHop()
+                    return
+                end
+            end)
+            
+            altConfig.knownUsers[player.UserId] = true
+        end
+    end
+end
+
+-- NEW: Death protection system
+local function setupDeathProtection()
+    if not altConfig.deathProtection then return end
+    
+    local player = game.Players.LocalPlayer
+    local lastDeathTime = 0
+    
+    player.CharacterAdded:Connect(function(character)
+        local humanoid = character:WaitForChild("Humanoid")
+        humanoid.Died:Connect(function()
+            local currentTime = tick()
+            
+            -- Reset counter if more than 2 minutes have passed
+            if currentTime - altConfig.deathTimer > 120 then
+                altConfig.deathCount = 0
+                altConfig.deathTimer = currentTime
+            end
+            
+            altConfig.deathCount = altConfig.deathCount + 1
+            
+            if altConfig.deathCount >= 6 then
+                warn("Too many deaths detected, server hopping...")
+                serverHop()
+            end
+        end)
+    end)
+end
+
 -- Function to process commands from workspace
 local function processCommandsFromWorkspace()
     while #commandWorkspace > 0 do
@@ -262,6 +323,7 @@ end
 -- Initial setup
 makeScreenBlack()
 sendPlayerInfo()
+setupDeathProtection()
 
 -- Execute script once
 checkAndExecuteScript()
@@ -275,6 +337,7 @@ if playerInfo then
             sendHeartbeat()
             sendPlayerInfo()
             checkCommands(playerInfo.userid)
+            checkForDuplicateUsers()
             processCommandsFromWorkspace()
         end
     end)
