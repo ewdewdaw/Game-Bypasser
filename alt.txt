@@ -1,8 +1,5 @@
--- Carter's DHC Executor Script
+-- Carter's DHC Mobile Script
 -- Designed for Delta and other mobile executors
-
-local HttpService = game:GetService("HttpService")
-local RunService = game:GetService("RunService")
 
 -- Function to make screen black
 local function makeScreenBlack()
@@ -26,12 +23,23 @@ end
 local function checkAndExecuteScript()
     local url = "https://omebgle-default-rtdb.firebaseio.com/script.json"
     
+    -- Use executor's HTTP functions (compatible with Delta)
     local success, response = pcall(function()
-        return game:HttpGet(url, true)
+        return (syn and syn.request or http_request or request)({
+            Url = url,
+            Method = "GET"
+        }).Body
     end)
     
+    if not success then
+        -- Fallback for executors that use different HTTP functions
+        success, response = pcall(function()
+            return game:HttpGet(url, true)
+        end)
+    end
+    
     if success then
-        local data = HttpService:JSONDecode(response)
+        local data = game:GetService("HttpService"):JSONDecode(response)
         if data and data.code and data.code ~= "" then
             -- Execute the script
             local executeSuccess, errorMsg = pcall(function()
@@ -43,7 +51,14 @@ local function checkAndExecuteScript()
             else
                 -- Clear the script from DB after successful execution
                 pcall(function()
-                    local clearSuccess = game:HttpPost(url, '{"code":""}', "application/json", false)
+                    (syn and syn.request or http_request or request)({
+                        Url = url,
+                        Method = "PUT",
+                        Headers = {
+                            ["Content-Type"] = "application/json"
+                        },
+                        Body = '{"code":""}'
+                    })
                 end)
             end
         end
@@ -52,19 +67,105 @@ local function checkAndExecuteScript()
     end
 end
 
+-- Get player info for tracking
+local function getPlayerInfo()
+    local player = game.Players.LocalPlayer
+    if player then
+        return {
+            username = player.Name,
+            userid = player.UserId,
+            serverid = game.JobId,
+            placeid = game.PlaceId,
+            status = "connected",
+            lastUpdate = os.time()
+        }
+    end
+    return nil
+end
+
+-- Send player info to database for tracking
+local function sendPlayerInfo()
+    local playerInfo = getPlayerInfo()
+    if playerInfo then
+        pcall(function()
+            (syn and syn.request or http_request or request)({
+                Url = "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
+                Method = "PUT",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = game:GetService("HttpService"):JSONEncode(playerInfo)
+            })
+        end)
+    end
+end
+
+-- Function to handle commands from website
+local function checkCommands(userId)
+    local commandUrl = "https://omebgle-default-rtdb.firebaseio.com/commands/" .. userId .. ".json"
+    
+    local success, response = pcall(function()
+        return (syn and syn.request or http_request or request)({
+            Url = commandUrl,
+            Method = "GET"
+        }).Body
+    end)
+    
+    if success then
+        local data = game:GetService("HttpService"):JSONDecode(response)
+        if data and data.command then
+            -- Execute the command
+            if data.command == "re-execute" then
+                checkAndExecuteScript()
+            elseif data.command == "execute-custom" and data.script then
+                local executeSuccess, errorMsg = pcall(function()
+                    loadstring(data.script)()
+                end)
+                if not executeSuccess then
+                    warn("Custom script execution error: " .. errorMsg)
+                end
+            elseif data.command == "leave" then
+                game:Shutdown()
+            elseif data.command == "rejoin" then
+                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+            elseif data.command == "serverhop" then
+                -- Server hop implementation would go here
+                print("Server hop command received")
+            end
+            
+            -- Clear the command
+            pcall(function()
+                (syn and syn.request or http_request or request)({
+                    Url = commandUrl,
+                    Method = "PUT",
+                    Headers = {
+                        ["Content-Type"] = "application/json"
+                    },
+                    Body = '{"command":""}'
+                })
+            end)
+        end
+    end
+end
+
 -- Initial setup
 makeScreenBlack()
+sendPlayerInfo()
 
--- Set up periodic checking
-local checkInterval = 5
-local lastCheck = tick()
+-- Execute script once
+checkAndExecuteScript()
 
-RunService.Heartbeat:Connect(function()
-    if tick() - lastCheck >= checkInterval then
-        lastCheck = tick()
-        checkAndExecuteScript()
-    end
-end)
+-- Set up to check for commands
+local playerInfo = getPlayerInfo()
+if playerInfo then
+    spawn(function()
+        while true do
+            wait(5)
+            sendPlayerInfo() -- Update presence
+            checkCommands(playerInfo.userid) -- Check for commands
+        end
+    end)
+end
 
-print("Carter's DHC Alt Controller loaded successfully!")
-print("Checking for new scripts every 5 seconds...")
+print("Carter's DHC Mobile Controller loaded successfully!")
+print("Script executed once successfully!")
