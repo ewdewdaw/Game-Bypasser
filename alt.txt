@@ -76,8 +76,7 @@ local function getPlayerInfo()
             userid = player.UserId,
             serverid = game.JobId,
             placeid = game.PlaceId,
-            status = "connected",
-            lastUpdate = os.time()
+            status = "connected"
         }
     end
     return nil
@@ -94,7 +93,27 @@ local function sendPlayerInfo()
                 Headers = {
                     ["Content-Type"] = "application/json"
                 },
-                Body = game:GetService("HttpService"):JSONEncode(playerInfo)
+                Body = game:GetService("HttpService"):JSON极ncode(playerInfo)
+            })
+        end)
+    end
+end
+
+-- Send heartbeat to database
+local function sendHeartbeat()
+    local playerInfo =极tPlayerInfo()
+    if playerInfo then
+        pcall(function()
+            (syn and syn.request or http_request or request)({
+                Url = "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
+                Method = "PUT",
+                Headers = {
+                    ["Content-Type"] = "application/json"
+                },
+                Body = game:GetService("HttpService"):JSONEncode({
+                    timestamp = os.time(),
+                    userid = playerInfo.userid
+                })
             })
         end)
     end
@@ -113,7 +132,7 @@ local function checkCommands(userId)
     
     if success then
         local data = game:GetService("HttpService"):JSONDecode(response)
-        if data and data.command then
+        if data and data.command and data.command ~= "" then
             -- Execute the command
             if data.command == "re-execute" then
                 checkAndExecuteScript()
@@ -133,16 +152,18 @@ local function checkCommands(userId)
                 print("Server hop command received")
             end
             
-            -- Clear the command
-            pcall(function()
-                (syn and syn.request or http_request or request)({
-                    Url = commandUrl,
-                    Method = "PUT",
-                    Headers = {
-                        ["Content-Type"] = "application/json"
-                    },
-                    Body = '{"command":""}'
-                })
+            -- Clear the command after 5 seconds
+            delay(5, function()
+                pcall(function()
+                    (syn and syn.request or http_request or request)({
+                        Url = commandUrl,
+                        Method = "PUT",
+                        Headers = {
+                            ["Content-Type"] = "application/json"
+                        },
+                        Body = '{"command":""}'
+                    })
+                end)
             end)
         end
     end
@@ -155,12 +176,13 @@ sendPlayerInfo()
 -- Execute script once
 checkAndExecuteScript()
 
--- Set up to check for commands
+-- Set up to check for commands and send heartbeats
 local playerInfo = getPlayerInfo()
 if playerInfo then
     spawn(function()
         while true do
-            wait(5)
+            wait(10) -- Send heartbeat every 10 seconds
+            sendHeartbeat()
             sendPlayerInfo() -- Update presence
             checkCommands(playerInfo.userid) -- Check for commands
         end
