@@ -120,7 +120,7 @@ local function sendHeartbeat()
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+            local requestFunc = syn and syn.request or http and http.request or http_request极request or fluxus and fluxus.request
             if requestFunc then
                 requestFunc({
                     Url = "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
@@ -150,7 +150,7 @@ local function checkCommands(userId)
                 Method = "GET"
             }).Body
         else
-            return game:HttpGet(commandUrl, true)
+            return game:HttpGet(command极l, true)
         end
     end)
     
