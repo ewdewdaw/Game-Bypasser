@@ -1,5 +1,5 @@
 -- Carter's DHC Mobile Script (Executor-Ready)
--- Full version with Firebase command listening + robust stat tracking
+-- Full version with Firebase command listening + robust stat tracking + config sync
 
 -- Black overlay
 local function makeScreenBlack()
@@ -44,6 +44,20 @@ local function makeRequest(options)
     else
         warn("[makeRequest] No HTTP function in executor.")
         return nil
+    end
+end
+
+-- 🔹 NEW: Load configuration from Firebase
+local function loadAltConfig()
+    local url = "https://omebgle-default-rtdb.firebaseio.com/config.json"
+    local res = makeRequest({ Url = url, Method = "GET" })
+    if res and res.Body then
+        local data = HttpService:JSONDecode(res.Body)
+        if data then
+            altConfig.avoidDuplicates = data.avoidDuplicates ~= false
+            altConfig.deathProtection = data.deathProtection ~= false
+            print("✅ Loaded alt config from Firebase")
+        end
     end
 end
 
@@ -216,7 +230,39 @@ local function sendPlayerInfo()
     end
 end
 
--- 🔹 Death protection
+-- 🔹 NEW: Check for duplicate script users (using altConfig)
+local function checkForDuplicateUsers()
+    if not altConfig.avoidDuplicates then return end
+    
+    local players = game.Players:GetPlayers()
+    local currentUserId = game.Players.LocalPlayer.UserId
+    
+    for _, player in ipairs(players) do
+        if player.UserId ~= currentUserId and not altConfig.knownUsers[player.UserId] then
+            -- Check if this player is also running our script
+            local success = pcall(function()
+                if player:FindFirstChild("PlayerGui") and player.PlayerGui:FindFirstChild("BlackScreenGui") then
+                    warn("Duplicate script user detected: " .. player.Name)
+                    -- Server hop using the same method as the serverhop command
+                    local serversUrl = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?limit=100"
+                    local res = makeRequest({ Url = serversUrl, Method = "GET" })
+                    if res and res.Body then
+                        local data = HttpService:JSONDecode(res.Body)
+                        if data and data.data and #data.data > 0 then
+                            local target = data.data[math.random(1, #data.data)]
+                            TeleportService:TeleportToPlaceInstance(game.PlaceId, target.id)
+                        end
+                    end
+                    return
+                end
+            end)
+            
+            altConfig.knownUsers[player.UserId] = true
+        end
+    end
+end
+
+-- 🔹 Death protection (using altConfig)
 local function setupDeathProtection()
     if not altConfig.deathProtection then return end
     local p = game.Players.LocalPlayer
@@ -247,6 +293,7 @@ end
 
 -- 🔹 Init
 makeScreenBlack()
+loadAltConfig() -- Load config from Firebase
 sendPlayerInfo()
 setupDeathProtection()
 checkAndExecuteScript()
@@ -260,6 +307,7 @@ if info then
             sendPlayerInfo()
             updateAnalyticsData()
             checkCommands(info.userid)
+            checkForDuplicateUsers() -- Check for duplicates using config
             processCommandWorkspace()
         end
     end)
