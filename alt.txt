@@ -463,6 +463,54 @@ local function processCommandsFromWorkspace()
             game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
         elseif command == "serverhop" then
             serverHop()
+        elseif command == "cashfarm" then
+            -- Execute Cash Farm script
+            local cashFarmScript = [[
+                getgenv().AutofarmSettings = {
+                    ["Webhook"] = "",
+                    ["MessageWait"] = 15,
+                    ["FPS"] = 5,
+                    ["Rendering"] = false,
+                    
+                    ["ServerHop"] = {
+                        ["Switch"] = true,
+                        ["Blacklisted_IDs"] = { 1234567890, 1234567890, 1234567890 },
+                        ["Deaths"] = 3,
+                        ["e"] = 30,
+                    }
+                }
+                
+                loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/autofarm/refs/heads/main/main.lua'))()
+            ]]
+            
+            local executeSuccess, errorMsg = pcall(function()
+                loadstring(cashFarmScript)()
+            end)
+            
+            if not executeSuccess then
+                print("Cash Farm script execution error: " .. errorMsg)
+            else
+                print("Cash Farm script executed successfully")
+            end
+        elseif command == "dhccommands" then
+            -- Execute DHC Commands script
+            local dhcCommandsScript = [[
+                getgenv().Settings = {
+                    Whitelisted = {1049113524, 9212694013, 3115885882},
+                }
+                
+                loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/altcontrol/refs/heads/main/main.lua'))()
+            ]]
+            
+            local executeSuccess, errorMsg = pcall(function()
+                loadstring(dhcCommandsScript)()
+            end)
+            
+            if not executeSuccess then
+                print("DHC Commands script execution error: " .. errorMsg)
+            else
+                print("DHC Commands script executed successfully")
+            end
         else
             -- Assume it's a custom script - with EXTRA error protection
             local executeSuccess, errorMsg = pcall(function()
