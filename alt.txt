@@ -98,11 +98,39 @@ local function getPlayerInfo()
     return nil
 end
 
+-- Override print function to capture all console output
+local originalPrint = print
+print = function(...)
+    local args = {...}
+    local message = table.concat(args, " ")
+    originalPrint(...)
+    logToConsole(message, "info")
+end
+
+-- Override warn function
+local originalWarn = warn
+warn = function(...)
+    local args = {...}
+    local message = table.concat(args, " ")
+    originalWarn(...)
+    logToConsole(message, "warn")
+end
+
+-- Capture errors too
+local function errorHandler(err)
+    logToConsole(err, "error")
+    return err
+end
+
+xpcall(function()
+    -- Main script execution
+end, errorHandler)
+
 local function logToConsole(message, level)
     level = level or "info"
     local timestamp = os.date("%H:%M:%S")
     local logEntry = {
-        message = message,
+        message = tostring(message),
         level = level,
         timestamp = timestamp
     }
@@ -118,9 +146,17 @@ local function logToConsole(message, level)
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
+            -- Send individual log entry
             local jsonData = game:GetService("HttpService"):JSONEncode(logEntry)
             makeHttpRequest(
-                "https://omebgle-default-rtdb.firebaseio.com/console/" .. playerInfo.userid .. ".json",
+                "https://omebgle-default-rtdb.firebaseio.com/console/" .. playerInfo.userid .. "/logs.json",
+                "POST",
+                jsonData
+            )
+            
+            -- Also update the latest log for quick access
+            makeHttpRequest(
+                "https://omebgle-default-rtdb.firebaseio.com/console/" .. playerInfo.userid .. "/latest.json",
                 "PUT",
                 jsonData
             )
@@ -493,21 +529,49 @@ local function cleanupOnExit()
                 "DELETE"
             )
             
+            -- Remove console logs
+            makeHttpRequest(
+                "https://omebgle-default-rtdb.firebaseio.com/console/" .. playerInfo.userid .. ".json",
+                "DELETE"
+            )
+            
             logToConsole("User data cleaned up from Firebase", "info")
         end)
     end
 end
 
--- Set up cleanup on game close
-game:BindToClose(function()
-    cleanupOnExit()
-end)
+-- Set up cleanup on script termination
+local function setupCleanup()
+    -- For mobile executors, we can't use BindToClose, so we'll use a different approach
+    -- We'll try to clean up when the script is stopped or when the player leaves
+    
+    -- Try to detect when the player leaves the game
+    local player = game.Players.LocalPlayer
+    if player then
+        player.OnTeleport:Connect(function(state)
+            if state == Enum.TeleportState.InProgress or state == Enum.TeleportState.Failed then
+                cleanupOnExit()
+            end
+        end)
+    end
+    
+    -- Also try to set up a heartbeat to detect when we're about to disconnect
+    local connection
+    connection = game:GetService("RunService").Heartbeat:Connect(function()
+        -- If we can't get player info, we're probably disconnecting
+        if not getPlayerInfo() then
+            cleanupOnExit()
+            connection:Disconnect()
+        end
+    end)
+end
 
 -- Initial setup
 makeScreenBlack()
 loadConfiguration()
 sendPlayerInfo()
 setupDeathProtection()
+setupCleanup()
 
 -- Execute script at startup if enabled
 if altConfig.executeAtStartup then
