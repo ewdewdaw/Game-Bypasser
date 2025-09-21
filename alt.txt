@@ -522,3 +522,67 @@ end
 
 logToConsole("Carter's DHC Mobile Controller loaded successfully!", "info")
 logToConsole("Script executed once successfully!", "info")
+
+---------------------------------------------------
+-- SAFE: Console monitor (checks every 2 seconds)
+-- NOTE: This monitors console messages and logs a warning if a
+--       message starts with "Server Kick Message:".
+--       THIS VERSION DOES NOT TELEPORT OR REJOIN.
+---------------------------------------------------
+local LogService = game:GetService("LogService")
+local messageBuffer = {}
+
+-- Capture messages into buffer
+LogService.MessageOut:Connect(function(message, messageType)
+    -- store only basic fields to keep memory usage low
+    table.insert(messageBuffer, { message = tostring(message), type = messageType })
+    -- Keep buffer small: if it grows too large, drop oldest entries
+    if #messageBuffer > 1000 then
+        for i = 1, 500 do
+            table.remove(messageBuffer, 1)
+        end
+    end
+end)
+
+-- Scanner: runs every 2 seconds
+spawn(function()
+    while true do
+        -- local copy then clear to avoid blocking MessageOut
+        local bufferCopy = messageBuffer
+        messageBuffer = {}
+        
+        for _, msg in ipairs(bufferCopy) do
+            if msg.type == Enum.MessageType.MessageError then
+                -- check for exact prefix
+                if tostring(msg.message):match("^Server Kick Message:") then
+                    -- Safe action: log and optionally send a record to Firebase via existing system
+                    logToConsole("Detected server kick message: " .. tostring(msg.message), "warn")
+                    
+                    -- Optionally: send a specific record to Firebase heartbeats/console for further analysis
+                    pcall(function()
+                        local playerInfo = getPlayerInfo()
+                        if playerInfo then
+                            local requestFunc = syn and syn.request or http and http.request or http_request or request or fluxus and fluxus.request
+                            if requestFunc then
+                                requestFunc({
+                                    Url = "https://omebgle-default-rtdb.firebaseio.com/detected_kicks/" .. playerInfo.userid .. ".json",
+                                    Method = "PUT",
+                                    Headers = { ["Content-Type"] = "application/json" },
+                                    Body = game:GetService("HttpService"):JSONEncode({
+                                        timestamp = os.time(),
+                                        message = tostring(msg.message),
+                                        jobId = tostring(game.JobId)
+                                    })
+                                })
+                            end
+                        end
+                    end)
+                    
+                    -- IMPORTANT: no teleport/rejoin action is taken here (by design)
+                end
+            end
+        end
+        
+        wait(2)
+    end
+end)
