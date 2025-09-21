@@ -1,4 +1,4 @@
--- Carter's DHC Mobile Script
+-- Carter's DHC Mobile Script for Low-End Devices
 -- Designed for Delta and other mobile executors
 
 print("Script starting...")
@@ -36,7 +36,7 @@ task.spawn(function()
     end
 end)
 
--- Create a universal HTTP request function
+-- Create a universal HTTP request function optimized for low-end devices
 local function makeHttpRequest(url, method, body, headers)
     method = method or "GET"
     headers = headers or {}
@@ -320,14 +320,16 @@ local function sendPlayerInfo()
     end
 end
 
--- Send heartbeat to database
+-- Send heartbeat to database - optimized for low-end devices
 local function sendHeartbeat()
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
             local heartbeatData = {
                 timestamp = os.time(),
-                userid = playerInfo.userid
+                userid = playerInfo.userid,
+                fps = math.floor(1/game:GetService("RunService").Heartbeat:Wait()),
+                performance = "low"
             }
             local jsonData = game:GetService("HttpService"):JSONEncode(heartbeatData)
             makeHttpRequest(
@@ -335,6 +337,7 @@ local function sendHeartbeat()
                 "PUT",
                 jsonData
             )
+            print("Heartbeat sent at: " .. os.time())
         end)
     end
 end
@@ -426,7 +429,7 @@ local function setupDeathProtection()
     
     player.CharacterAdded:Connect(function(character)
         local humanoid = character:WaitForChild("Humanoid")
-        humanoid.Died:Connect(function()
+        humanoid.DDied:Connect(function()
             local currentTime = tick()
             
             -- Reset counter if more than the configured time window has passed
