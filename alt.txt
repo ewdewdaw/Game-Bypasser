@@ -523,6 +523,13 @@ local function setupCleanup()
     end)
 end
 
+-- Function to check cash bounty and other system updates
+local function checkSystemUpdates()
+    -- This is where you would check for cash bounty updates, system changes, etc.
+    -- For now, we'll just send a heartbeat
+    sendHeartbeat()
+end
+
 -- Initial setup
 makeScreenBlack()
 loadConfiguration()
@@ -535,13 +542,13 @@ if altConfig.executeAtStartup then
     checkAndExecuteScript()
 end
 
--- Set up to check for commands and send heartbeats
+-- Set up to check for commands and send heartbeats every 25 seconds
 local playerInfo = getPlayerInfo()
 if playerInfo then
     spawn(function()
         while true do
-            wait(10) -- Send heartbeat every 10 seconds
-            sendHeartbeat()
+            wait(25) -- Send heartbeat every 25 seconds
+            checkSystemUpdates() -- Check for system updates and send heartbeat
             sendPlayerInfo()
             checkCommands(playerInfo.userid)
             checkForDuplicateUsers()
