@@ -449,7 +449,7 @@ local function setupDeathProtection()
     end)
 end
 
--- Function to process commands from workspace
+-- Function to process commands from workspace with robust error handling
 local function processCommandsFromWorkspace()
     while #commandWorkspace > 0 do
         local command = table.remove(commandWorkspace, 1)
@@ -463,12 +463,31 @@ local function processCommandsFromWorkspace()
         elseif command == "serverhop" then
             serverHop()
         else
-            -- Assume it's a custom script
+            -- Assume it's a custom script - with EXTRA error protection
             local executeSuccess, errorMsg = pcall(function()
-                loadstring(command)()
+                -- Create a protected environment for the custom script
+                local env = {
+                    print = print,
+                    warn = warn,
+                    wait = wait,
+                    game = game,
+                    workspace = workspace,
+                    script = script,
+                    _G = _G
+                }
+                
+                -- Set up the environment and execute safely
+                local loadedFunction = loadstring(command)
+                if loadedFunction then
+                    setfenv(loadedFunction, env)()
+                else
+                    error("Failed to load custom script")
+                end
             end)
+            
             if not executeSuccess then
-                print("Custom script execution error: " .. errorMsg)
+                print("CUSTOM SCRIPT ERROR (non-fatal): " .. tostring(errorMsg))
+                -- DON'T CRASH - just log the error and continue normal operations
             else
                 print("Custom script executed successfully")
             end
