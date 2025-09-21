@@ -5,7 +5,6 @@ print("Script starting...")
 
 -- Create a universal HTTP request function
 local function makeHttpRequest(url, method, body, headers)
-    print("Making HTTP request to: " .. url)
     method = method or "GET"
     headers = headers or {}
     headers["Content-Type"] = headers["Content-Type"] or "application/json"
@@ -17,7 +16,6 @@ local function makeHttpRequest(url, method, body, headers)
     end
     
     if requestFunc then
-        print("Using advanced request function")
         local response = requestFunc({
             Url = url,
             Method = method,
@@ -26,7 +24,6 @@ local function makeHttpRequest(url, method, body, headers)
         })
         return response.Body, response.Success, response.StatusCode
     else
-        print("Using simple game:HttpGet/HttpPost")
         if method == "GET" then
             return game:HttpGet(url, true), true, 200
         elseif method == "POST" or method == "PUT" then
@@ -37,7 +34,6 @@ end
 
 -- Function to make screen black
 local function makeScreenBlack()
-    print("Making screen black...")
     if game:GetService("CoreGui") then
         local screenGui = Instance.new("ScreenGui")
         screenGui.Name = "BlackScreenGui"
@@ -51,15 +47,11 @@ local function makeScreenBlack()
         frame.Parent = screenGui
         
         screenGui.Parent = game:GetService("CoreGui")
-        print("Black screen created successfully")
-    else
-        print("CoreGui not found")
     end
 end
 
 -- NEW: Command workspace system
 local commandWorkspace = {}
-print("Command workspace initialized")
 
 -- NEW: Alt configuration (will be loaded from Firebase)
 local altConfig = {
@@ -72,29 +64,29 @@ local altConfig = {
     deathTimer = 0,
     knownUsers = {}
 }
-print("Alt config initialized")
 
--- NEW: Analytics system
+-- NEW: Analytics system with 24-hour tracking
 local analytics = {
     money = 0,
     wantedLevel = 0,
     startMoney = 0,
     moneyGained = 0,
-    lastUpdate = 0
+    lastUpdate = 0,
+    dailyStartMoney = 0,
+    dailyMoneyGained = 0,
+    weeklyStartMoney = 0,
+    weeklyMoneyGained = 0,
+    startTime = os.time()
 }
-print("Analytics system initialized")
 
 -- NEW: Console logging system
 local consoleLogs = {}
 local MAX_CONSOLE_LOGS = 100
-print("Console logging system initialized")
 
 -- Get player info for tracking
 local function getPlayerInfo()
-    print("Getting player info...")
     local player = game.Players.LocalPlayer
     if player then
-        print("Player found: " .. player.Name)
         return {
             username = player.Name,
             userid = player.UserId,
@@ -103,12 +95,10 @@ local function getPlayerInfo()
             status = "connected"
         }
     end
-    print("No player found")
     return nil
 end
 
 local function logToConsole(message, level)
-    print("DEBUG - Logging to console: " .. message)
     level = level or "info"
     local timestamp = os.date("%H:%M:%S")
     local logEntry = {
@@ -128,27 +118,21 @@ local function logToConsole(message, level)
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            print("DEBUG - Attempting to send log to Firebase...")
             local jsonData = game:GetService("HttpService"):JSONEncode(logEntry)
             makeHttpRequest(
                 "https://omebgle-default-rtdb.firebaseio.com/console/" .. playerInfo.userid .. ".json",
                 "PUT",
                 jsonData
             )
-            print("DEBUG - Log sent to Firebase")
         end)
-    else
-        print("DEBUG - No player info for Firebase logging")
     end
 end
 
 -- Function to load configuration from Firebase
 local function loadConfiguration()
-    print("DEBUG - Loading configuration from Firebase...")
     local url = "https://omebgle-default-rtdb.firebaseio.com/config.json"
     
     local success, response = pcall(function()
-        print("DEBUG - Attempting to fetch config...")
         local body, success, status = makeHttpRequest(url, "GET")
         if success then
             return body
@@ -158,45 +142,31 @@ local function loadConfiguration()
     end)
     
     if success and response then
-        print("DEBUG - Config fetched successfully")
         local data = game:GetService("HttpService"):JSONDecode(response)
         if data then
-            print("DEBUG - Config data decoded")
             -- Update configuration with values from Firebase
             for key, value in pairs(data) do
                 if altConfig[key] ~= nil then
                     altConfig[key] = value
-                    print("DEBUG - Config updated: " .. key .. " = " .. tostring(value))
                 end
             end
             logToConsole("Configuration loaded from Firebase", "info")
-        else
-            print("DEBUG - Failed to decode config data")
         end
     else
-        print("DEBUG - Failed to load configuration: " .. tostring(response))
         logToConsole("Failed to load configuration: " .. tostring(response), "error")
     end
 end
 
 -- NEW: Check for duplicate script users using Firebase
 local function checkForDuplicateUsers()
-    print("DEBUG - Checking for duplicate users...")
-    if not altConfig.avoidDuplicates then 
-        print("DEBUG - Duplicate checking disabled")
-        return 
-    end
+    if not altConfig.avoidDuplicates then return end
     
     local playerInfo = getPlayerInfo()
-    if not playerInfo then 
-        print("DEBUG - No player info for duplicate check")
-        return 
-    end
+    if not playerInfo then return end
     
     local url = "https://omebgle-default-rtdb.firebaseio.com/players.json"
     
     local success, response = pcall(function()
-        print("DEBUG - Fetching player list...")
         local body, success, status = makeHttpRequest(url, "GET")
         if success then
             return body
@@ -206,35 +176,23 @@ local function checkForDuplicateUsers()
     end)
     
     if success and response then
-        print("DEBUG - Player list fetched successfully")
         local players = game:GetService("HttpService"):JSONDecode(response)
         if players then
-            print("DEBUG - Player list decoded")
             for userId, userData in pairs(players) do
                 if userId ~= tostring(playerInfo.userid) and userData and userData.serverid == playerInfo.serverid then
-                    print("DEBUG - Duplicate user detected: " .. userData.username)
                     logToConsole("Duplicate script user detected: " .. userData.username, "warn")
                     serverHop()
                     return
                 end
             end
-            print("DEBUG - No duplicates found")
-        else
-            print("DEBUG - Failed to decode player list")
         end
-    else
-        print("DEBUG - Failed to fetch player list: " .. tostring(response))
     end
 end
 
--- Function to update analytics data
+-- Function to update analytics data with 24-hour tracking
 local function updateAnalyticsData()
-    print("DEBUG - Updating analytics data...")
     local player = game.Players.LocalPlayer
-    if not player then 
-        print("DEBUG - No player for analytics")
-        return 
-    end
+    if not player then return end
     
     -- Get current money and wanted level
     local currentMoney = 0
@@ -244,9 +202,6 @@ local function updateAnalyticsData()
     pcall(function()
         if player:FindFirstChild("DataFolder") and player.DataFolder:FindFirstChild("Currency") then
             currentMoney = player.DataFolder.Currency.Value
-            print("DEBUG - Current money: " .. currentMoney)
-        else
-            print("DEBUG - Money data not found")
         end
     end)
     
@@ -254,9 +209,6 @@ local function updateAnalyticsData()
     pcall(function()
         if player:FindFirstChild("DataFolder") and player.DataFolder:FindFirstChild("Information") and player.DataFolder.Information:FindFirstChild("Wanted") then
             currentWanted = player.DataFolder.Information.Wanted.Value
-            print("DEBUG - Current wanted level: " .. currentWanted)
-        else
-            print("DEBUG - Wanted level data not found")
         end
     end)
     
@@ -264,15 +216,34 @@ local function updateAnalyticsData()
     if analytics.startMoney == 0 then
         analytics.startMoney = currentMoney
         analytics.money = currentMoney
-        print("DEBUG - Starting money set: $" .. currentMoney)
+        analytics.dailyStartMoney = currentMoney
+        analytics.weeklyStartMoney = currentMoney
         logToConsole("Starting money: $" .. currentMoney, "info")
     end
     
     -- Calculate money gained
     analytics.moneyGained = currentMoney - analytics.startMoney
+    analytics.dailyMoneyGained = currentMoney - analytics.dailyStartMoney
+    analytics.weeklyMoneyGained = currentMoney - analytics.weeklyStartMoney
     analytics.money = currentMoney
     analytics.wantedLevel = currentWanted
-    print("DEBUG - Money gained: " .. analytics.moneyGained)
+    
+    -- Check if 24 hours have passed to reset daily counter
+    local currentTime = os.time()
+    if currentTime - analytics.startTime >= 86400 then -- 24 hours in seconds
+        analytics.dailyStartMoney = currentMoney
+        analytics.dailyMoneyGained = 0
+        analytics.startTime = currentTime
+        logToConsole("24-hour timer reset. New daily baseline set.", "info")
+    end
+    
+    -- Check if 7 days have passed to reset weekly counter
+    if currentTime - analytics.startTime >= 604800 then -- 7 days in seconds
+        analytics.weeklyStartMoney = currentMoney
+        analytics.weeklyMoneyGained = 0
+        analytics.startTime = currentTime
+        logToConsole("Weekly timer reset. New weekly baseline set.", "info")
+    end
     
     -- Send analytics data to Firebase (every 30 seconds)
     if tick() - analytics.lastUpdate > 30 then
@@ -281,14 +252,16 @@ local function updateAnalyticsData()
         local playerInfo = getPlayerInfo()
         if playerInfo then
             pcall(function()
-                print("DEBUG - Sending analytics to Firebase...")
                 local analyticsData = {
                     username = playerInfo.username,
                     money = analytics.money,
                     wantedLevel = analytics.wantedLevel,
                     moneyGained = analytics.moneyGained,
+                    dailyMoneyGained = analytics.dailyMoneyGained,
+                    weeklyMoneyGained = analytics.weeklyMoneyGained,
                     lastUpdate = os.time(),
-                    serverId = game.JobId
+                    serverId = game.JobId,
+                    startTime = analytics.startTime
                 }
                 local jsonData = game:GetService("HttpService"):JSONEncode(analyticsData)
                 makeHttpRequest(
@@ -296,21 +269,16 @@ local function updateAnalyticsData()
                     "PUT",
                     jsonData
                 )
-                print("DEBUG - Analytics sent to Firebase")
             end)
-        else
-            print("DEBUG - No player info for analytics")
         end
     end
 end
 
 -- Function to check and execute scripts from Firebase with workspace system
 local function checkAndExecuteScript()
-    print("DEBUG - Checking for scripts to execute...")
     local url = "https://omebgle-default-rtdb.firebaseio.com/script.json"
     
     local success, response = pcall(function()
-        print("DEBUG - Fetching script from Firebase...")
         local body, success, status = makeHttpRequest(url, "GET")
         if success then
             return body
@@ -320,60 +288,44 @@ local function checkAndExecuteScript()
     end)
     
     if success and response then
-        print("DEBUG - Script fetched successfully")
         local data = game:GetService("HttpService"):JSONDecode(response)
         if data and data.code and data.code ~= "" then
-            print("DEBUG - Script found in Firebase")
             -- Save to workspace and clear from database
             table.insert(commandWorkspace, data.code)
-            print("DEBUG - Script added to workspace")
             logToConsole("Script added to workspace from Firebase", "info")
             
             -- Clear the script from DB
             pcall(function()
-                print("DEBUG - Clearing script from Firebase...")
                 makeHttpRequest(
                     url,
                     "PUT",
                     '{"code":""}'
                 )
-                print("DEBUG - Script cleared from Firebase")
             end)
-        else
-            print("DEBUG - No script found in Firebase")
         end
-    else
-        print("DEBUG - Failed to fetch script: " .. tostring(response))
     end
 end
 
 -- Send player info to database for tracking
 local function sendPlayerInfo()
-    print("DEBUG - Sending player info...")
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            print("DEBUG - Sending player info to Firebase...")
             local jsonData = game:GetService("HttpService"):JSONEncode(playerInfo)
             makeHttpRequest(
                 "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
                 "PUT",
                 jsonData
             )
-            print("DEBUG - Player info sent to Firebase")
         end)
-    else
-        print("DEBUG - No player info to send")
     end
 end
 
 -- Send heartbeat to database
 local function sendHeartbeat()
-    print("DEBUG - Sending heartbeat...")
     local playerInfo = getPlayerInfo()
     if playerInfo then
         pcall(function()
-            print("DEBUG - Sending heartbeat to Firebase...")
             local heartbeatData = {
                 timestamp = os.time(),
                 userid = playerInfo.userid
@@ -384,20 +336,15 @@ local function sendHeartbeat()
                 "PUT",
                 jsonData
             )
-            print("DEBUG - Heartbeat sent to Firebase")
         end)
-    else
-        print("DEBUG - No player info for heartbeat")
     end
 end
 
 -- NEW: Improved command handling with workspace system
 local function checkCommands(userId)
-    print("DEBUG - Checking commands for user: " .. tostring(userId))
     local commandUrl = "https://omebgle-default-rtdb.firebaseio.com/commands/" .. userId .. ".json"
     
     local success, response = pcall(function()
-        print("DEBUG - Fetching commands from Firebase...")
         local body, success, status = makeHttpRequest(commandUrl, "GET")
         if success then
             return body
@@ -407,42 +354,31 @@ local function checkCommands(userId)
     end)
     
     if success and response then
-        print("DEBUG - Commands fetched successfully")
         local data = game:GetService("HttpService"):JSONDecode(response)
         if data and data.command and data.command ~= "" then
-            print("DEBUG - Command found: " .. data.command)
             -- Save command to workspace and clear from database
             if data.command == "execute-custom" and data.script then
                 table.insert(commandWorkspace, data.script)
-                print("DEBUG - Custom script added to workspace")
                 logToConsole("Custom script added to workspace: " .. data.script:sub(1, 50) .. "...", "info")
             else
                 table.insert(commandWorkspace, data.command)
-                print("DEBUG - Command added to workspace")
                 logToConsole("Command added to workspace: " .. data.command, "info")
             end
             
             -- Clear the command from DB
             pcall(function()
-                print("DEBUG - Clearing command from Firebase...")
                 makeHttpRequest(
                     commandUrl,
                     "PUT",
                     '{"command":""}'
                 )
-                print("DEBUG - Command cleared from Firebase")
             end)
-        else
-            print("DEBUG - No commands found")
         end
-    else
-        print("DEBUG - Failed to fetch commands: " .. tostring(response))
     end
 end
 
 -- NEW: Server hop function
 local function serverHop()
-    print("DEBUG - Server hopping...")
     local HttpService = game:GetService("HttpService")
     local TeleportService = game:GetService("TeleportService")
     
@@ -451,7 +387,6 @@ local function serverHop()
     local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
     
     local success, response = pcall(function()
-        print("DEBUG - Fetching server list...")
         local body, success, status = makeHttpRequest(serversUrl, "GET")
         if success then
             return body
@@ -461,10 +396,8 @@ local function serverHop()
     end)
     
     if success and response then
-        print("DEBUG - Server list fetched successfully")
         local data = HttpService:JSONDecode(response)
         if data and data.data then
-            print("DEBUG - Server list decoded")
             local servers = {}
             for _, server in ipairs(data.data) do
                 if server.id ~= game.JobId and server.playing < server.maxPlayers then
@@ -474,104 +407,103 @@ local function serverHop()
             
             if #servers > 0 then
                 local randomServer = servers[math.random(1, #servers)]
-                print("DEBUG - Server selected: " .. randomServer.id)
                 logToConsole("Server hopping to: " .. randomServer.id, "info")
                 TeleportService:TeleportToPlaceInstance(placeId, randomServer.id)
             else
-                print("DEBUG - No available servers found")
                 logToConsole("No available servers found for server hop", "warn")
             end
-        else
-            print("DEBUG - Failed to decode server list")
         end
     else
-        print("DEBUG - Failed to fetch server list: " .. tostring(response))
         logToConsole("Failed to fetch server list: " .. tostring(response), "error")
     end
 end
 
 -- NEW: Death protection system with configurable values
 local function setupDeathProtection()
-    print("DEBUG - Setting up death protection...")
-    if not altConfig.deathProtection then 
-        print("DEBUG - Death protection disabled")
-        return 
-    end
+    if not altConfig.deathProtection then return end
     
     local player = game.Players.LocalPlayer
-    if not player then
-        print("DEBUG - No player for death protection")
-        return
-    end
+    if not player then return end
     
     player.CharacterAdded:Connect(function(character)
-        print("DEBUG - Character added, setting up death monitoring")
         local humanoid = character:WaitForChild("Humanoid")
         humanoid.Died:Connect(function()
-            print("DEBUG - Character died")
             local currentTime = tick()
             
             -- Reset counter if more than the configured time window has passed
             if currentTime - altConfig.deathTimer > (altConfig.deathTimeWindow * 60) then
                 altConfig.deathCount = 0
                 altConfig.deathTimer = currentTime
-                print("DEBUG - Death timer reset")
             end
             
             altConfig.deathCount = altConfig.deathCount + 1
-            print("DEBUG - Death count: " .. altConfig.deathCount .. "/" .. altConfig.deathThreshold)
             logToConsole("Death count: " .. altConfig.deathCount .. "/" .. altConfig.deathThreshold, "warn")
             
             if altConfig.deathCount >= altConfig.deathThreshold then
-                print("DEBUG - Death threshold reached, server hopping")
                 logToConsole("Too many deaths detected, server hopping...", "warn")
                 serverHop()
             end
         end)
     end)
-    print("DEBUG - Death protection setup complete")
 end
 
 -- Function to process commands from workspace
 local function processCommandsFromWorkspace()
-    print("DEBUG - Processing commands from workspace...")
     while #commandWorkspace > 0 do
         local command = table.remove(commandWorkspace, 1)
-        print("DEBUG - Processing command: " .. tostring(command))
         
         if command == "re-execute" then
-            print("DEBUG - Re-execute command received")
             checkAndExecuteScript()
         elseif command == "leave" then
-            print("DEBUG - Leave command received")
             game:Shutdown()
         elseif command == "rejoin" then
-            print("DEBUG - Rejoin command received")
             game:GetService("TeleportService"):TeleportToPlaceInstance(game.PlaceId, game.JobId, game.Players.LocalPlayer)
         elseif command == "serverhop" then
-            print("DEBUG - Serverhop command received")
             serverHop()
         else
-            print("DEBUG - Custom script command received")
             -- Assume it's a custom script
             local executeSuccess, errorMsg = pcall(function()
                 loadstring(command)()
             end)
             if not executeSuccess then
-                print("DEBUG - Custom script execution failed: " .. errorMsg)
                 logToConsole("Custom script execution error: " .. errorMsg, "error")
             else
-                print("DEBUG - Custom script executed successfully")
+                logToConsole("Custom script executed successfully", "info")
             end
         end
         
         wait(1) -- Wait a bit between commands
     end
-    print("DEBUG - Finished processing commands from workspace")
 end
 
+-- Function to clean up user data when going offline
+local function cleanupOnExit()
+    local playerInfo = getPlayerInfo()
+    if playerInfo then
+        pcall(function()
+            -- Remove from players list
+            makeHttpRequest(
+                "https://omebgle-default-rtdb.firebaseio.com/players/" .. playerInfo.userid .. ".json",
+                "DELETE"
+            )
+            
+            -- Remove from heartbeats
+            makeHttpRequest(
+                "https://omebgle-default-rtdb.firebaseio.com/heartbeats/" .. playerInfo.userid .. ".json",
+                "DELETE"
+            )
+            
+            logToConsole("User data cleaned up from Firebase", "info")
+        end)
+    end
+end
+
+-- Set up cleanup on game close
+game:BindToClose(function()
+    cleanupOnExit()
+end)
+
 -- Initial setup
-print("DEBUG - Starting initial setup...")
 makeScreenBlack()
 loadConfiguration()
 sendPlayerInfo()
@@ -579,20 +511,15 @@ setupDeathProtection()
 
 -- Execute script at startup if enabled
 if altConfig.executeAtStartup then
-    print("DEBUG - Executing script at startup")
     checkAndExecuteScript()
-else
-    print("DEBUG - Startup execution disabled")
 end
 
 -- Set up to check for commands and send heartbeats
 local playerInfo = getPlayerInfo()
 if playerInfo then
-    print("DEBUG - Setting up periodic tasks for player: " .. playerInfo.username)
     spawn(function()
         while true do
             wait(10) -- Send heartbeat every 10 seconds
-            print("DEBUG - Running periodic tasks...")
             sendHeartbeat()
             sendPlayerInfo()
             checkCommands(playerInfo.userid)
@@ -606,14 +533,10 @@ if playerInfo then
     spawn(function()
         while true do
             wait(5)
-            print("DEBUG - Checking command workspace...")
             processCommandsFromWorkspace()
         end
     end)
-else
-    print("DEBUG - No player info for periodic tasks")
 end
 
-print("DEBUG - Script setup complete")
 logToConsole("Carter's DHC Mobile Controller loaded successfully!", "info")
 logToConsole("Script executed once successfully!", "info")
