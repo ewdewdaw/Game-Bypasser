@@ -178,8 +178,9 @@ local function checkForDuplicateUsers()
         local players = game:GetService("HttpService"):JSONDecode(response)
         if players then
             for userId, userData in pairs(players) do
-                if userId ~= tostring(playerInfo.userid) and userData and userData.serverid == playerInfo.serverid then
-                    print("Duplicate script user detected: " .. userData.username)
+                -- ADDED SAFETY CHECK: Make sure userData exists and has username/serverid
+                if userId ~= tostring(playerInfo.userid) and userData and type(userData) == "table" and userData.serverid and userData.serverid == playerInfo.serverid then
+                    print("Duplicate script user detected: " .. (userData.username or "Unknown"))
                     serverHop()
                     return
                 end
