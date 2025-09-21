@@ -174,7 +174,7 @@ local function checkForDuplicateUsers()
         end
     end)
     
-    if success and response then
+    if success and response and response ~= "null" then
         local players = game:GetService("HttpService"):JSONDecode(response)
         if players then
             for userId, userData in pairs(players) do
@@ -429,7 +429,7 @@ local function setupDeathProtection()
     
     player.CharacterAdded:Connect(function(character)
         local humanoid = character:WaitForChild("Humanoid")
-        humanoid.DDied:Connect(function()
+        humanoid.Died:Connect(function()
             local currentTime = tick()
             
             -- Reset counter if more than the configured time window has passed
