@@ -7,6 +7,7 @@ print("Script starting...")
 local Players = game:GetService("Players")
 local TeleportService = game:GetService("TeleportService")
 local LogService = game:GetService("LogService")
+local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local placeId = game.PlaceId
@@ -327,7 +328,10 @@ local function sendHeartbeat()
         pcall(function()
             local heartbeatData = {
                 timestamp = os.time(),
-                userid = playerInfo.userid
+                userid = playerInfo.userid,
+                username = playerInfo.username,
+                serverid = playerInfo.serverid,
+                placeid = playerInfo.placeid
             }
             local jsonData = game:GetService("HttpService"):JSONEncode(heartbeatData)
             makeHttpRequest(
@@ -443,7 +447,7 @@ local function setupDeathProtection()
                 serverHop()
             end
         end)
-    end)
+    end
 end
 
 -- Function to process commands from workspace
@@ -523,6 +527,19 @@ local function setupCleanup()
     end)
 end
 
+-- Main update function that runs every frame
+local function onUpdate()
+    -- Update analytics and send heartbeat every 25 seconds
+    if tick() - analytics.lastUpdate > 25 then
+        updateAnalyticsData()
+        sendHeartbeat()
+        sendPlayerInfo()
+        checkCommands(getPlayerInfo() and getPlayerInfo().userid or nil)
+        checkForDuplicateUsers()
+        processCommandsFromWorkspace()
+    end
+end
+
 -- Initial setup
 makeScreenBlack()
 loadConfiguration()
@@ -538,17 +555,8 @@ end
 -- Set up to check for commands and send heartbeats
 local playerInfo = getPlayerInfo()
 if playerInfo then
-    spawn(function()
-        while true do
-            wait(10) -- Send heartbeat every 10 seconds
-            sendHeartbeat()
-            sendPlayerInfo()
-            checkCommands(playerInfo.userid)
-            checkForDuplicateUsers()
-            updateAnalyticsData()
-            processCommandsFromWorkspace()
-        end
-    end)
+    -- Connect to RunService for continuous updates
+    RunService.Heartbeat:Connect(onUpdate)
     
     -- Also process command workspace regularly
     spawn(function()
