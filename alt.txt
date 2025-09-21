@@ -443,7 +443,7 @@ local function setupDeathProtection()
                 serverHop()
             end
         end)
-    end
+    end)
 end
 
 -- Function to process commands from workspace
@@ -473,7 +473,7 @@ local function processCommandsFromWorkspace()
         
         wait(1) -- Wait a bit between commands
     end
-}
+end
 
 -- Function to clean up user data when going offline
 local function cleanupOnExit()
