@@ -480,7 +480,14 @@ local function processCommandsFromWorkspace()
                     }
                 }
                 
-                loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/autofarm/refs/heads/main/main.lua'))()
+                -- Use pcall to prevent script errors from stopping execution
+                local success, err = pcall(function()
+                    loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/autofarm/refs/heads/main/main.lua'))()
+                end)
+                
+                if not success then
+                    warn("Cash Farm script error: " .. tostring(err))
+                end
             ]]
             
             local executeSuccess, errorMsg = pcall(function()
@@ -499,7 +506,14 @@ local function processCommandsFromWorkspace()
                     Whitelisted = {1049113524, 9212694013, 3115885882},
                 }
                 
-                loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/altcontrol/refs/heads/main/main.lua'))()
+                -- Use pcall to prevent script errors from stopping execution
+                local success, err = pcall(function()
+                    loadstring(game:HttpGet('https://raw.githubusercontent.com/marvcolol/altcontrol/refs/heads/main/main.lua'))()
+                end)
+                
+                if not success then
+                    warn("DHC Commands script error: " .. tostring(err))
+                end
             ]]
             
             local executeSuccess, errorMsg = pcall(function()
