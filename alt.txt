@@ -692,9 +692,7 @@ task.spawn(function()
     end)
 end)
 
-if _GLOBAL_CONFIG.executeAtStartup then
-    checkAndExecuteScript()
-end
+-- Removed executeAtStartup logic
 setupDeathProtection()
 setupCleanup()
 
