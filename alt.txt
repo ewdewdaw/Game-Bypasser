@@ -503,18 +503,20 @@ local function processCommands()
                     getgenv().ensureMapLoaded = ensureMapLoaded
                     
                     -- Delta-optimized settings
-                    getgenv().AutofarmSettings = {
-                        ["Webhook"] = "",
-                        ["MessageWait"] = 20,  -- Increased wait for Delta
-                        ["FPS"] = 3,  -- Lower FPS for Delta stability
-                        ["Rendering"] = false,
-                        ["DeltaCompatible"] = true,
-                        ["ServerHop"] = {
-                            ["Switch"] = true,
-                            ["Blacklisted_IDs"] = {},
-                            ["Deaths"] = 5,  -- Higher threshold for Delta
-                            ["e"] = 45,
-                        }
+getgenv().AutofarmSettings = {
+    ["Webhook"] = "WEBHOOK_URL_HERE",
+    ["MessageWait"] = 60, -- Message will be sent every hour
+    ["FPS"] = 5,
+    ["Rendering"] = false, -- Recommended to keep this false
+    
+    ["ServerHop"] = {
+        ["Switch"] = true, -- Set to false to turn off serverhopping
+        ["Blacklisted_IDs"] = { 1234567890, 1234567890, 1234567890 },
+        ["Deaths"] = 3,
+        ["Time"] = 30,
+    }
+}
+
                     }
                     
                     -- Load and patch the autofarm script for Delta
