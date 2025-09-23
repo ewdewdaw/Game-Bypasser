@@ -1,5 +1,6 @@
 -- Carter's DHC Mobile Script for Low-End Devices
 -- ULTIMATE BULLETPROOF VERSION - Survives ANY error and ALWAYS listens to commands
+-- DELTA EXECUTOR COMPATIBLE EDITION
 
 print("=== Carter's DHC ULTIMATE Controller Starting ===")
 
@@ -20,6 +21,98 @@ _GLOBAL_WORKSPACE.analytics = {
     weeklyMoneyGained = 0,
     startTime = os.time()
 }
+
+-- ========== DELTA MAP COMPATIBILITY LAYER ==========
+local function ensureMapLoaded()
+    local maxWaitTime = 30
+    local startTime = tick()
+    
+    print("🔍 Checking MAP availability...")
+    
+    while tick() - startTime < maxWaitTime do
+        if workspace:FindFirstChild("MAP") then
+            local map = workspace.MAP
+            -- Check if MAP has essential components (more than just basic structure)
+            if #map:GetChildren() > 3 then
+                print("✓ MAP fully loaded with " .. #map:GetChildren() .. " children")
+                return true
+            else
+                print("⚠️ MAP found but only " .. #map:GetChildren() .. " children - waiting for more...")
+            end
+        else
+            print("⏳ Waiting for MAP to appear...")
+        end
+        wait(2)
+    end
+    
+    print("❌ MAP failed to load within " .. maxWaitTime .. " seconds")
+    return false
+end
+
+local function safeMapAccess(operationName, accessFunction)
+    local success, result = pcall(function()
+        if not workspace:FindFirstChild("MAP") then
+            error("MAP not found in workspace")
+        end
+        return accessFunction(workspace.MAP)
+    end)
+    
+    if not success then
+        warn("[MAP SAFETY] " .. operationName .. " failed: " .. tostring(result))
+        return nil
+    end
+    return result
+end
+
+local function getDeltaCompatibleMap()
+    -- Try multiple ways to access MAP
+    local map = workspace:FindFirstChild("MAP") 
+              or workspace:FindFirstChild("Map")
+              or workspace:FindFirstChildOfClass("Model")
+    
+    if not map then
+        -- Create a dummy MAP for scripts that require it
+        local dummyMap = Instance.new("Folder")
+        dummyMap.Name = "MAP"
+        dummyMap.Parent = workspace
+        print("⚠️ Created dummy MAP for Delta compatibility")
+        return dummyMap
+    end
+    
+    print("✓ MAP access successful: " .. map.Name)
+    return map
+end
+
+local function patchScriptForDelta(scriptCode)
+    -- Replace common problematic patterns for Delta compatibility
+    local patches = {
+        ["workspace%.MAP%.(.-)"] = "safeMapAccess('%1', function(map) return map.%1 end)",
+        ["Workspace%.MAP%.(.-)"] = "safeMapAccess('%1', function(map) return map.%1 end)",
+        ["game%.Workspace%.MAP"] = "getDeltaCompatibleMap()",
+        ["workspace%.MAP"] = "getDeltaCompatibleMap()",
+        ["Workspace%.MAP"] = "getDeltaCompatibleMap()",
+    }
+    
+    for pattern, replacement in pairs(patches) do
+        scriptCode = scriptCode:gsub(pattern, replacement)
+    end
+    
+    -- Add Delta-specific optimizations
+    scriptCode = scriptCode:gsub("FPS = 5", "FPS = 3")  -- Lower FPS for Delta stability
+    scriptCode = scriptCode:gsub("Deaths = 3", "Deaths = 5")  -- Higher death threshold
+    
+    return scriptCode
+end
+
+-- Store compatibility functions in global workspace
+_GLOBAL_WORKSPACE.mapCompatibility = {
+    ensureMapLoaded = ensureMapLoaded,
+    safeMapAccess = safeMapAccess,
+    getDeltaCompatibleMap = getDeltaCompatibleMap,
+    patchScriptForDelta = patchScriptForDelta
+}
+
+-- ========== END DELTA COMPATIBILITY LAYER ==========
 
 -- ULTIMATE ERROR HANDLER - Prevents complete script death
 local function ultimateErrorHandler(err)
@@ -396,19 +489,45 @@ local function processCommands()
             
             if cmd.command == "cashfarm" then
                 pcall(function()
+                    print("🚀 Loading DELTA-COMPATIBLE cashfarm...")
+                    
+                    -- Ensure MAP is ready before proceeding
+                    if not ensureMapLoaded() then
+                        print("❌ Cashfarm aborted - MAP not available")
+                        return
+                    end
+                    
+                    -- Inject Delta compatibility functions
+                    getgenv().safeMapAccess = safeMapAccess
+                    getgenv().getDeltaCompatibleMap = getDeltaCompatibleMap
+                    getgenv().ensureMapLoaded = ensureMapLoaded
+                    
+                    -- Delta-optimized settings
                     getgenv().AutofarmSettings = {
                         ["Webhook"] = "",
-                        ["MessageWait"] = 15,
-                        ["FPS"] = 5,
+                        ["MessageWait"] = 20,  -- Increased wait for Delta
+                        ["FPS"] = 3,  -- Lower FPS for Delta stability
                         ["Rendering"] = false,
+                        ["DeltaCompatible"] = true,
                         ["ServerHop"] = {
                             ["Switch"] = true,
-                            ["Blacklisted_IDs"] = { 1234567890, 1234567890, 1234567890 },
-                            ["Deaths"] = 3,
-                            ["e"] = 30,
+                            ["Blacklisted_IDs"] = {},
+                            ["Deaths"] = 5,  -- Higher threshold for Delta
+                            ["e"] = 45,
                         }
                     }
-                    loadstring(game:HttpGet("https://raw.githubusercontent.com/marvcolol/autofarm/refs/heads/main/main.lua"))()
+                    
+                    -- Load and patch the autofarm script for Delta
+                    local autofarmScript = game:HttpGet("https://raw.githubusercontent.com/marvcolol/autofarm/refs/heads/main/main.lua", true)
+                    
+                    -- Apply Delta compatibility patches
+                    autofarmScript = patchScriptForDelta(autofarmScript)
+                    
+                    -- Add MAP safety header
+                    autofarmScript = "-- DELTA PATCH APPLIED: " .. os.date() .. "\n" .. autofarmScript
+                    
+                    print("✓ Cashfarm script patched for Delta compatibility")
+                    loadstring(autofarmScript)()
                 end)
                 
             elseif cmd.command == "dhccommands" then
@@ -437,7 +556,9 @@ local function processCommands()
                 
             elseif cmd.command == "execute-custom" and cmd.script then
                 pcall(function()
-                    local func, err = loadstring(cmd.script)
+                    -- Apply Delta patches to custom scripts too
+                    local patchedScript = patchScriptForDelta(cmd.script)
+                    local func, err = loadstring(patchedScript)
                     if func then
                         local env = {
                             print = print,
@@ -446,7 +567,9 @@ local function processCommands()
                             game = game,
                             workspace = workspace,
                             script = script,
-                            _G = _G
+                            _G = _G,
+                            safeMapAccess = safeMapAccess,
+                            getDeltaCompatibleMap = getDeltaCompatibleMap
                         }
                         setfenv(func, env)()
                         pcall(func)
@@ -456,7 +579,7 @@ local function processCommands()
                 end)
             end
             
-            wait(0.5)
+            wait(1)  -- Increased delay for Delta stability
         end
     end)
 end
@@ -473,7 +596,8 @@ local function updatePlayerInfo()
             serverid = game.JobId,
             placeid = game.PlaceId,
             status = "online",
-            lastUpdate = os.time()
+            lastUpdate = os.time(),
+            deltaCompatible = true  -- Mark as Delta compatible
         }
         
         local jsonData = game:GetService("HttpService"):JSONEncode(playerData)
@@ -509,14 +633,14 @@ local function setupAutoRejoin()
                     for i, msg in ipairs(_GLOBAL_WORKSPACE.messageBuffer) do
                         if msg.type == Enum.MessageType.MessageError then
                             if msg.message:match("^Server Kick Message:") or msg.message:match("Server Kick") or msg.message:match("Disconnected") then
-                                wait(2)
+                                wait(3)  -- Increased delay for Delta
                                 TeleportService:Teleport(game.PlaceId, Players.LocalPlayer)
                             end
                         end
                     end
                     _GLOBAL_WORKSPACE.messageBuffer = {}
                 end)
-                wait(2)
+                wait(3)  -- Increased delay for Delta
             end
         end)
     end)
@@ -569,6 +693,15 @@ end
 -- Initial setup
 makeScreenBlack()
 loadConfiguration()
+
+-- Pre-load MAP detection on startup
+task.spawn(function()
+    pcall(function()
+        wait(5)  -- Wait for game to load
+        ensureMapLoaded()
+    end)
+end)
+
 if _GLOBAL_CONFIG.executeAtStartup then
     checkAndExecuteScript()
 end
@@ -595,7 +728,7 @@ end)
 task.spawn(function()
     while true do
         pcall(processCommands)
-        wait(1)
+        wait(1.5)  -- Increased delay for Delta stability
     end
 end)
 
@@ -647,7 +780,7 @@ task.spawn(function()
                     local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
                     if humanoid then
                         humanoid.Died:Connect(function()
-                            wait(5)
+                            wait(6)  -- Increased delay for Delta
                             pcall(function()
                                 game:GetService("TeleportService"):Teleport(game.PlaceId, player)
                             end)
@@ -695,9 +828,10 @@ print("================================================")
 print("🎯 Carter's DHC ULTIMATE Controller ACTIVE")
 print("💓 Heartbeats: EVERY 25 SECONDS")
 print("📡 Commands: LISTENING EVERY 3 SECONDS")  
-print("⚡ Processing: EVERY SECOND")
+print("⚡ Processing: EVERY 1.5 SECONDS (Delta Optimized)")
 print("📊 Analytics: EVERY 60 SECONDS")
 print("🔍 Duplicate Check: EVERY 45 SECONDS")
+print("🗺️  MAP Compatibility: ACTIVE")
 print("🚨 Emergency Recovery: ACTIVE")
 print("================================================")
 
@@ -708,7 +842,8 @@ task.spawn(function()
             local emergencyData = {
                 emergency = true,
                 timestamp = os.time(),
-                survival_mode = "ultimate"
+                survival_mode = "ultimate",
+                delta_compatible = true
             }
             
             local success, jsonData = pcall(function()
