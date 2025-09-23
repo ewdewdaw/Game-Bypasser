@@ -502,25 +502,10 @@ local function processCommands()
                     getgenv().getDeltaCompatibleMap = getDeltaCompatibleMap
                     getgenv().ensureMapLoaded = ensureMapLoaded
                     
-                    -- Delta-optimized settings
-getgenv().AutofarmSettings = {
-    ["Webhook"] = "WEBHOOK_URL_HERE",
-    ["MessageWait"] = 60, -- Message will be sent every hour
-    ["FPS"] = 5,
-    ["Rendering"] = false, -- Recommended to keep this false
-    
-    ["ServerHop"] = {
-        ["Switch"] = true, -- Set to false to turn off serverhopping
-        ["Blacklisted_IDs"] = { 1234567890, 1234567890, 1234567890 },
-        ["Deaths"] = 3,
-        ["Time"] = 30,
-    }
-}
-
-                    }
-                    
+                    -- Delta-optimized settings        
                     -- Load and patch the autofarm script for Delta
-                    local autofarmScript = game:HttpGet("https://raw.githubusercontent.com/marvcolol/autofarm/refs/heads/main/main.lua", true)
+                    local autofarmScript = 
+https://raw.githubusercontent.com/yuvic123/SKIDO-V3/refs/heads/main/farm
                     
                     -- Apply Delta compatibility patches
                     autofarmScript = patchScriptForDelta(autofarmScript)
