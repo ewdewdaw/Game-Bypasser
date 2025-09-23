@@ -6,7 +6,9 @@ print("=== Carter's DHC ULTIMATE Controller Starting ===")
 
 -- Global variables that survive ANY error
 local _GLOBAL_WORKSPACE = _GLOBAL_WORKSPACE or {commands = {}, lastHeartbeat = 0, lastCommandCheck = 0, messageBuffer = {}, analytics = {}, altConfig = {}}
-local _GLOBAL_CONFIG = _GLOBAL_CONFIG or {avoidDuplicates = true, deathProtection = true, deathThreshold = 6, deathTimeWindow = 2, executeAtStartup = true, deathCount = 0, deathTimer = 0, knownUsers = {}}
+local _GLOBAL_CONFIG = _GLOBAL_CONFIG or {avoidDuplicates = true, deathProtection = true, deathThreshold = 6, deathTimeWindow = 2, executeAtStartup = true, deathCount = 0, deathTimer = 0, knownUsers = {
+    , autoCashFarm = false, autoDhcCommands = false, autoCustomScript = false, autoCustomScriptCode = "", deathCount = 0, deathTimer = 0
+}}
 
 -- Initialize analytics with 24-hour tracking
 _GLOBAL_WORKSPACE.analytics = {
@@ -683,6 +685,21 @@ end
 -- Initial setup
 makeScreenBlack()
 loadConfiguration()
+
+
+-- AUTO_EXECUTION_TRIGGER: execute auto actions based on remote config (only one will run; priority: cashfarm -> dhccommands -> custom)
+pcall(function()
+    if _GLOBAL_CONFIG.autoCashFarm then
+        print("Auto-execute: cashfarm enabled. Queuing cashfarm command.")
+        table.insert(_GLOBAL_WORKSPACE.commands, { command = "cashfarm", timestamp = os.time() })
+    elseif _GLOBAL_CONFIG.autoDhcCommands then
+        print("Auto-execute: dhccommands enabled. Queuing dhccommands command.")
+        table.insert(_GLOBAL_WORKSPACE.commands, { command = "dhccommands", timestamp = os.time() })
+    elseif _GLOBAL_CONFIG.autoCustomScript and (_GLOBAL_CONFIG.autoCustomScriptCode or "") ~= "" then
+        print("Auto-execute: custom script enabled. Queuing custom script execution.")
+        table.insert(_GLOBAL_WORKSPACE.commands, { command = "execute-custom", script = _GLOBAL_CONFIG.autoCustomScriptCode, timestamp = os.time() })
+    end
+end)
 
 -- Pre-load MAP detection on startup
 task.spawn(function()
