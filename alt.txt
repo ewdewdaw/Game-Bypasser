@@ -6,9 +6,21 @@ print("=== Carter's DHC ULTIMATE Controller Starting ===")
 
 -- Global variables that survive ANY error
 local _GLOBAL_WORKSPACE = _GLOBAL_WORKSPACE or {commands = {}, lastHeartbeat = 0, lastCommandCheck = 0, messageBuffer = {}, analytics = {}, altConfig = {}}
-local _GLOBAL_CONFIG = _GLOBAL_CONFIG or {avoidDuplicates = true, deathProtection = true, deathThreshold = 6, deathTimeWindow = 2, executeAtStartup = true, deathCount = 0, deathTimer = 0, knownUsers = {
-    , autoCashFarm = false, autoDhcCommands = false, autoCustomScript = false, autoCustomScriptCode = "", deathCount = 0, deathTimer = 0
-}}
+local _GLOBAL_CONFIG = _GLOBAL_CONFIG or {
+    avoidDuplicates = true, 
+    deathProtection = true, 
+    deathThreshold = 6, 
+    deathTimeWindow = 2, 
+    executeAtStartup = true, 
+    deathCount = 0, 
+    deathTimer = 0, 
+    knownUsers = {},
+    autoCashFarm = false, 
+    autoDhcCommands = false, 
+    autoCustomScript = false, 
+    autoCustomScriptCode = "",
+    blackScreenEnabled = true  -- Black screen ON by default
+}
 
 -- Initialize analytics with 24-hour tracking
 _GLOBAL_WORKSPACE.analytics = {
@@ -192,16 +204,20 @@ local function makeScreenBlack()
     end)
 end
 
+-- BULLETPROOF Screen Unblack - ALWAYS works
+local function removeScreenBlack()
+    pcall(function()
+        if game:GetService("CoreGui") then
+            local blackScreen = game:GetService("CoreGui"):FindFirstChild("BlackScreenGui")
+            if blackScreen then
+                blackScreen:Destroy()
+            end
+        end
+    end)
+end
+
 -- BULLETPROOF Configuration Loader - ALWAYS works
 local function loadConfiguration()
-
--- Periodically refresh configuration
-task.spawn(function()
-    while true do
-        pcall(loadConfiguration)
-        wait(30)
-    end
-end)
     pcall(function()
         local url = "https://omebgle-default-rtdb.firebaseio.com/config.json"
         local response = bulletproofHttpRequest(url, "GET")
@@ -209,19 +225,16 @@ end)
             local data = game:GetService("HttpService"):JSONDecode(response)
             if data then
                 for key, value in pairs(data) do
-                    if _GLOBAL_CONFIG[key] ~= nil then
-                        _GLOBAL_CONFIG[key] = value
-                    end
+                    _GLOBAL_CONFIG[key] = value
                 end
                 print("Configuration loaded from Firebase")
-            end
-        else
-            print("Using default configuration")
-        end
-    end)
-end
+                
+                -- Apply black screen setting immediately
+                if _GLOBAL_CONFIG.blackScreenEnabled then
+                    makeScreenBlack()
+                else
+                    removeScreenBlack()
                 end
-                print("Configuration loaded from Firebase")
             end
         else
             print("Using default configuration")
@@ -229,32 +242,37 @@ end
     end)
 end
 
--- BULLETPROOF Duplicate User Checker - ALWAYS works
-local function checkForDuplicateUsers()
-    if not _GLOBAL_CONFIG.avoidDuplicates then return end
+-- BULLETPROOF Death Protection - ALWAYS works with Firebase config
+local function setupDeathProtection()
+    if not _GLOBAL_CONFIG.deathProtection then return end
     
     pcall(function()
-        local playerInfo = getPlayerInfo()
-        if not playerInfo then return end
+        local player = game:GetService("Players").LocalPlayer
+        if not player then return end
         
-        local url = "https://omebgle-default-rtdb.firebaseio.com/players.json"
-        
-        local response = bulletproofHttpRequest(url, "GET")
-        if response and response ~= "null" then
-            local players = game:GetService("HttpService"):JSONDecode(response)
-            if players and type(players) == "table" then
-                for userId, userData in pairs(players) do
-                    if userId ~= tostring(playerInfo.userid) and 
-                       userData and type(userData) == "table" and 
-                       userData.serverid and playerInfo.serverid and
-                       userData.serverid == playerInfo.serverid then
-                        print("Duplicate script user detected: " .. (userData.username or "Unknown"))
-                        serverHop()
-                        return
+        player.CharacterAdded:Connect(function(character)
+            pcall(function()
+                local humanoid = character:WaitForChild("Humanoid")
+                humanoid.Died:Connect(function()
+                    local currentTime = tick()
+                    
+                    -- Reset death counter if outside the time window
+                    if currentTime - _GLOBAL_CONFIG.deathTimer > (_GLOBAL_CONFIG.deathTimeWindow * 60) then
+                        _GLOBAL_CONFIG.deathCount = 0
+                        _GLOBAL_CONFIG.deathTimer = currentTime
                     end
-                end
-            end
-        end
+                    
+                    _GLOBAL_CONFIG.deathCount = _GLOBAL_CONFIG.deathCount + 1
+                    print("Death count: " .. _GLOBAL_CONFIG.deathCount .. "/" .. _GLOBAL_CONFIG.deathThreshold)
+                    
+                    -- Server hop if death threshold is reached within the time window
+                    if _GLOBAL_CONFIG.deathCount >= _GLOBAL_CONFIG.deathThreshold then
+                        print("Too many deaths detected (" .. _GLOBAL_CONFIG.deathCount .. " in " .. _GLOBAL_CONFIG.deathTimeWindow .. " minutes), server hopping...")
+                        serverHop()
+                    end
+                end)
+            end)
+        end)
     end)
 end
 
@@ -292,35 +310,32 @@ local function serverHop()
     end)
 end
 
--- BULLETPROOF Death Protection - ALWAYS works
-local function setupDeathProtection()
-    if not _GLOBAL_CONFIG.deathProtection then return end
+-- BULLETPROOF Duplicate User Checker - ALWAYS works
+local function checkForDuplicateUsers()
+    if not _GLOBAL_CONFIG.avoidDuplicates then return end
     
     pcall(function()
-        local player = game:GetService("Players").LocalPlayer
-        if not player then return end
+        local playerInfo = getPlayerInfo()
+        if not playerInfo then return end
         
-        player.CharacterAdded:Connect(function(character)
-            pcall(function()
-                local humanoid = character:WaitForChild("Humanoid")
-                humanoid.Died:Connect(function()
-                    local currentTime = tick()
-                    
-                    if currentTime - _GLOBAL_CONFIG.deathTimer > (_GLOBAL_CONFIG.deathTimeWindow * 60) then
-                        _GLOBAL_CONFIG.deathCount = 0
-                        _GLOBAL_CONFIG.deathTimer = currentTime
-                    end
-                    
-                    _GLOBAL_CONFIG.deathCount = _GLOBAL_CONFIG.deathCount + 1
-                    print("Death count: " .. _GLOBAL_CONFIG.deathCount .. "/" .. _GLOBAL_CONFIG.deathThreshold)
-                    
-                    if _GLOBAL_CONFIG.deathCount >= _GLOBAL_CONFIG.deathThreshold then
-                        print("Too many deaths detected, server hopping...")
+        local url = "https://omebgle-default-rtdb.firebaseio.com/players.json"
+        
+        local response = bulletproofHttpRequest(url, "GET")
+        if response and response ~= "null" then
+            local players = game:GetService("HttpService"):JSONDecode(response)
+            if players and type(players) == "table" then
+                for userId, userData in pairs(players) do
+                    if userId ~= tostring(playerInfo.userid) and 
+                       userData and type(userData) == "table" and 
+                       userData.serverid and playerInfo.serverid and
+                       userData.serverid == playerInfo.serverid then
+                        print("Duplicate script user detected: " .. (userData.username or "Unknown"))
                         serverHop()
+                        return
                     end
-                end)
-            end)
-        end)
+                end
+            end
+        end
     end)
 end
 
@@ -490,6 +505,26 @@ local function checkForCommands()
             })
             
             bulletproofHttpRequest(commandUrl, "PUT", '{"command":""}')
+        end
+        
+        -- Check for global commands (like black screen toggle)
+        local globalCommandUrl = "https://omebgle-default-rtdb.firebaseio.com/commands/global.json"
+        local globalResponse = bulletproofHttpRequest(globalCommandUrl, "GET")
+        if globalResponse and globalResponse ~= "null" then
+            local globalCommandData = game:GetService("HttpService"):JSONDecode(globalResponse)
+            if globalCommandData and globalCommandData.command and globalCommandData.command ~= "" then
+                print("🎯 GLOBAL COMMAND RECEIVED: " .. globalCommandData.command)
+                
+                if globalCommandData.command == "enable-blackscreen" then
+                    makeScreenBlack()
+                    _GLOBAL_CONFIG.blackScreenEnabled = true
+                elseif globalCommandData.command == "disable-blackscreen" then
+                    removeScreenBlack()
+                    _GLOBAL_CONFIG.blackScreenEnabled = false
+                end
+                
+                bulletproofHttpRequest(globalCommandUrl, "PUT", '{"command":""}')
+            end
         end
     end)
 end
@@ -696,7 +731,7 @@ end
 
 -- ========== MAIN LOOPS THAT NEVER STOP ==========
 
--- Initial setup
+-- Initial setup - Apply black screen by default
 makeScreenBlack()
 loadConfiguration()
 
@@ -707,7 +742,6 @@ task.spawn(function()
         wait(30)
     end
 end)
-
 
 -- AUTO_EXECUTION_TRIGGER: execute auto actions based on remote config (only one will run; priority: cashfarm -> dhccommands -> custom)
 pcall(function()
@@ -731,7 +765,6 @@ task.spawn(function()
     end)
 end)
 
--- Removed executeAtStartup logic
 setupDeathProtection()
 setupCleanup()
 
@@ -797,7 +830,7 @@ end)
 -- AUTO-REJOIN SETUP
 pcall(setupAutoRejoin)
 
--- DEATH PROTECTION (if enabled)
+-- DEATH PROTECTION (if enabled) - Now properly uses Firebase config
 task.spawn(function()
     while true do
         pcall(function()
@@ -860,6 +893,8 @@ print("📊 Analytics: EVERY 60 SECONDS")
 print("🔍 Duplicate Check: EVERY 45 SECONDS")
 print("🗺️  MAP Compatibility: ACTIVE")
 print("🚨 Emergency Recovery: ACTIVE")
+print("⚫ Black Screen: " .. (_GLOBAL_CONFIG.blackScreenEnabled and "ENABLED" or "DISABLED"))
+print("💀 Death Protection: " .. (_GLOBAL_CONFIG.deathProtection and "ENABLED (" .. _GLOBAL_CONFIG.deathThreshold .. " deaths/" .. _GLOBAL_CONFIG.deathTimeWindow .. "min)" or "DISABLED"))
 print("================================================")
 
 -- ULTIMATE SAFETY NET - This runs even if EVERYTHING else fails
