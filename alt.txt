@@ -1,11 +1,24 @@
 -- Carter's DHC Mobile Script for Low-End Devices
 -- ULTIMATE BULLETPROOF VERSION - Survives ANY error and ALWAYS listens to commands
 -- DELTA EXECUTOR COMPATIBLE EDITION
+-- ENHANCED SERVER HOP WITH SERVER BLACKLISTING SYSTEM
 
 print("=== Carter's DHC ULTIMATE Controller Starting ===")
 
 -- Global variables that survive ANY error
-local _GLOBAL_WORKSPACE = _GLOBAL_WORKSPACE or {commands = {}, lastHeartbeat = 0, lastCommandCheck = 0, messageBuffer = {}, analytics = {}, altConfig = {}}
+local _GLOBAL_WORKSPACE = _GLOBAL_WORKSPACE or {
+    commands = {}, 
+    lastHeartbeat = 0, 
+    lastCommandCheck = 0, 
+    messageBuffer = {}, 
+    analytics = {}, 
+    altConfig = {},
+    serverBlacklist = {},
+    currentServerId = nil,
+    originalServerId = nil,
+    deathRecords = {}
+}
+
 local _GLOBAL_CONFIG = _GLOBAL_CONFIG or {
     avoidDuplicates = true, 
     deathProtection = true, 
@@ -19,7 +32,10 @@ local _GLOBAL_CONFIG = _GLOBAL_CONFIG or {
     autoDhcCommands = false, 
     autoCustomScript = false, 
     autoCustomScriptCode = "",
-    blackScreenEnabled = true  -- Black screen ON by default
+    blackScreenEnabled = true,  -- Black screen ON by default
+    serverBlacklistDuration = 3600,  -- 1 hour in seconds
+    preferLowPlayerServers = true,
+    maxPlayerThreshold = 10  -- Prefer servers with less than 10 players
 }
 
 -- Initialize analytics with 24-hour tracking
@@ -34,6 +50,15 @@ _GLOBAL_WORKSPACE.analytics = {
     weeklyStartMoney = 0,
     weeklyMoneyGained = 0,
     startTime = os.time()
+}
+
+-- Initialize server tracking
+_GLOBAL_WORKSPACE.serverTracking = {
+    currentServer = game.JobId,
+    originalServer = game.JobId,
+    joinTime = os.time(),
+    deathsInServer = 0,
+    firstDeathTime = 0
 }
 
 -- ========== DELTA MAP COMPATIBILITY LAYER ==========
@@ -242,7 +267,272 @@ local function loadConfiguration()
     end)
 end
 
--- BULLETPROOF Death Protection - ALWAYS works with Firebase config
+-- ========== ENHANCED SERVER BLACKLIST SYSTEM ==========
+
+local function loadServerBlacklist()
+    pcall(function()
+        local url = "https://omebgle-default-rtdb.firebaseio.com/serverBlacklist.json"
+        local response = bulletproofHttpRequest(url, "GET")
+        if response and response ~= "null" then
+            local data = game:GetService("HttpService"):JSONDecode(response)
+            if data then
+                _GLOBAL_WORKSPACE.serverBlacklist = data
+                print("Loaded server blacklist: " .. #_GLOBAL_WORKSPACE.serverBlacklist .. " servers")
+            end
+        end
+    end)
+end
+
+local function saveServerBlacklist()
+    pcall(function()
+        local url = "https://omebgle-default-rtdb.firebaseio.com/serverBlacklist.json"
+        local jsonData = game:GetService("HttpService"):JSONEncode(_GLOBAL_WORKSPACE.serverBlacklist)
+        bulletproofHttpRequest(url, "PUT", jsonData)
+    end)
+end
+
+local function addServerToBlacklist(serverId)
+    pcall(function()
+        local currentTime = os.time()
+        local blacklistEntry = {
+            serverId = serverId,
+            blacklistedAt = currentTime,
+            expiresAt = currentTime + _GLOBAL_CONFIG.serverBlacklistDuration,
+            reason = "excessive_deaths"
+        }
+        
+        -- Check if server is already blacklisted
+        for i, entry in ipairs(_GLOBAL_WORKSPACE.serverBlacklist) do
+            if entry.serverId == serverId then
+                -- Update existing entry
+                _GLOBAL_WORKSPACE.serverBlacklist[i] = blacklistEntry
+                print("Updated blacklist for server: " .. serverId)
+                saveServerBlacklist()
+                return
+            end
+        end
+        
+        -- Add new entry
+        table.insert(_GLOBAL_WORKSPACE.serverBlacklist, blacklistEntry)
+        print("Added server to blacklist: " .. serverId .. " for 1 hour")
+        saveServerBlacklist()
+    end)
+end
+
+local function cleanupExpiredBlacklists()
+    pcall(function()
+        local currentTime = os.time()
+        local newBlacklist = {}
+        local removedCount = 0
+        
+        for i, entry in ipairs(_GLOBAL_WORKSPACE.serverBlacklist) do
+            if entry.expiresAt > currentTime then
+                table.insert(newBlacklist, entry)
+            else
+                removedCount = removedCount + 1
+            end
+        end
+        
+        if removedCount > 0 then
+            _GLOBAL_WORKSPACE.serverBlacklist = newBlacklist
+            saveServerBlacklist()
+            print("Cleaned up " .. removedCount .. " expired blacklist entries")
+        end
+    end)
+end
+
+local function isServerBlacklisted(serverId)
+    cleanupExpiredBlacklists()  -- Clean up before checking
+    
+    for i, entry in ipairs(_GLOBAL_WORKSPACE.serverBlacklist) do
+        if entry.serverId == serverId then
+            return true, entry.expiresAt - os.time()
+        end
+    end
+    return false, 0
+end
+
+-- ========== FIXED DEATH PROTECTION SYSTEM ==========
+
+local function setupEnhancedDeathProtection()
+    if not _GLOBAL_CONFIG.deathProtection then return end
+    
+    pcall(function()
+        local player = game:GetService("Players").LocalPlayer
+        if not player then return end
+        
+        local function onCharacterAdded(character)
+            pcall(function()
+                local humanoid = character:WaitForChild("Humanoid")
+                humanoid.Died:Connect(function()
+                    local currentTime = tick()
+                    local serverId = game.JobId
+                    
+                    -- Initialize death records for this server if not exists
+                    if not _GLOBAL_WORKSPACE.deathRecords[serverId] then
+                        _GLOBAL_WORKSPACE.deathRecords[serverId] = {
+                            count = 0,
+                            firstDeathTime = currentTime,
+                            lastDeathTime = currentTime
+                        }
+                    end
+                    
+                    local deathRecord = _GLOBAL_WORKSPACE.deathRecords[serverId]
+                    deathRecord.count = deathRecord.count + 1
+                    deathRecord.lastDeathTime = currentTime
+                    
+                    print("Death #" .. deathRecord.count .. " in server " .. serverId)
+                    
+                    -- Check if we've exceeded the death threshold within the time window
+                    local timeSinceFirstDeath = currentTime - deathRecord.firstDeathTime
+                    local deathsInTimeWindow = deathRecord.count
+                    
+                    -- Only trigger server hop if we meet BOTH conditions:
+                    -- 1. Death count reaches threshold
+                    -- 2. Time window condition is met
+                    if deathsInTimeWindow >= _GLOBAL_CONFIG.deathThreshold then
+                        if timeSinceFirstDeath <= (_GLOBAL_CONFIG.deathTimeWindow * 60) then
+                            print("🚨 Excessive deaths detected (" .. deathsInTimeWindow .. " deaths in " .. math.floor(timeSinceFirstDeath) .. "s)")
+                            print("🔄 Server hopping and blacklisting current server...")
+                            
+                            -- Add current server to blacklist
+                            addServerToBlacklist(serverId)
+                            
+                            -- Server hop to a better server
+                            serverHop()
+                        else
+                            -- Reset counter if outside time window but keep counting
+                            deathRecord.firstDeathTime = currentTime
+                            deathRecord.count = 1  -- Start new window with current death
+                            print("Reset death counter (outside time window)")
+                        end
+                    else
+                        print("Death count: " .. deathsInTimeWindow .. "/" .. _GLOBAL_CONFIG.deathThreshold .. " (threshold not reached)")
+                    end
+                end)
+            end)
+        end
+        
+        -- Handle initial character and respawns
+        if player.Character then
+            onCharacterAdded(player.Character)
+        end
+        player.CharacterAdded:Connect(onCharacterAdded)
+    end)
+end
+
+-- ========== ENHANCED SERVER HOP SYSTEM ==========
+
+local function getOptimalServer()
+    pcall(function()
+        local HttpService = game:GetService("HttpService")
+        local placeId = game.PlaceId
+        
+        -- Try to get server list
+        local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
+        local response = bulletproofHttpRequest(serversUrl, "GET")
+        
+        if not response then
+            print("❌ Failed to fetch server list")
+            return nil
+        end
+        
+        local data = HttpService:JSONDecode(response)
+        if not data or not data.data then
+            print("❌ Invalid server list response")
+            return nil
+        end
+        
+        local optimalServers = {}
+        local goodServers = {}
+        local fallbackServers = {}
+        
+        for _, server in ipairs(data.data) do
+            -- Skip current server and blacklisted servers
+            if server.id ~= game.JobId and not isServerBlacklisted(server.id) then
+                local playerCount = server.playing or 0
+                local maxPlayers = server.maxPlayers or 10
+                
+                -- Optimal: Very low player count (preferred)
+                if playerCount <= 3 and playerCount < maxPlayers then
+                    table.insert(optimalServers, server)
+                -- Good: Low player count but not empty
+                elseif playerCount <= _GLOBAL_CONFIG.maxPlayerThreshold and playerCount < maxPlayers then
+                    table.insert(goodServers, server)
+                -- Fallback: Any available server
+                elseif playerCount < maxPlayers then
+                    table.insert(fallbackServers, server)
+                end
+            end
+        end
+        
+        -- Priority order: Optimal -> Good -> Fallback
+        if #optimalServers > 0 then
+            print("🎯 Found " .. #optimalServers .. " optimal servers (≤3 players)")
+            return optimalServers[math.random(1, #optimalServers)]
+        elseif #goodServers > 0 then
+            print("✅ Found " .. #goodServers .. " good servers (≤" .. _GLOBAL_CONFIG.maxPlayerThreshold .. " players)")
+            return goodServers[math.random(1, #goodServers)]
+        elseif #fallbackServers > 0 then
+            print("⚠️ Found " .. #fallbackServers .. " fallback servers")
+            return fallbackServers[math.random(1, #fallbackServers)]
+        else
+            print("❌ No suitable servers found")
+            return nil
+        end
+    end)
+    
+    return nil
+end
+
+-- BULLETPROOF Server Hop - ENHANCED VERSION
+local function serverHop()
+    pcall(function()
+        local TeleportService = game:GetService("TeleportService")
+        local placeId = game.PlaceId
+        
+        print("🔍 Searching for optimal server...")
+        
+        local optimalServer = getOptimalServer()
+        if optimalServer then
+            print("🚀 Server hopping to: " .. optimalServer.id .. " (" .. optimalServer.playing .. "/" .. optimalServer.maxPlayers .. " players)")
+            
+            -- Record the server hop
+            _GLOBAL_WORKSPACE.serverTracking.originalServer = _GLOBAL_WORKSPACE.serverTracking.currentServer
+            _GLOBAL_WORKSPACE.serverTracking.currentServer = optimalServer.id
+            _GLOBAL_WORKSPACE.serverTracking.joinTime = os.time()
+            
+            TeleportService:TeleportToPlaceInstance(placeId, optimalServer.id)
+        else
+            print("❌ No available servers found for server hop")
+            -- Fallback to basic server hop without filters
+            local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=50"
+            local response = bulletproofHttpRequest(serversUrl, "GET")
+            
+            if response then
+                local data = game:GetService("HttpService"):JSONDecode(response)
+                if data and data.data then
+                    local servers = {}
+                    for _, server in ipairs(data.data) do
+                        if server.id ~= game.JobId and not isServerBlacklisted(server.id) and server.playing < server.maxPlayers then
+                            table.insert(servers, server)
+                        end
+                    end
+                    
+                    if #servers > 0 then
+                        local randomServer = servers[math.random(1, #servers)]
+                        print("🔄 Fallback server hop to: " .. randomServer.id)
+                        TeleportService:TeleportToPlaceInstance(placeId, randomServer.id)
+                    else
+                        print("💀 No servers available even with fallback")
+                    end
+                end
+            end
+        end
+    end)
+end
+
+-- BULLETPROOT Death Protection - ALWAYS works with Firebase config
 local function setupDeathProtection()
     if not _GLOBAL_CONFIG.deathProtection then return end
     
@@ -273,40 +563,6 @@ local function setupDeathProtection()
                 end)
             end)
         end)
-    end)
-end
-
--- BULLETPROOF Server Hop - ALWAYS works
-local function serverHop()
-    pcall(function()
-        local HttpService = game:GetService("HttpService")
-        local TeleportService = game:GetService("TeleportService")
-        
-        local placeId = game.PlaceId
-        local serversUrl = "https://games.roblox.com/v1/games/" .. placeId .. "/servers/Public?limit=100"
-        
-        local response = bulletproofHttpRequest(serversUrl, "GET")
-        if response then
-            local data = HttpService:JSONDecode(response)
-            if data and data.data then
-                local servers = {}
-                for _, server in ipairs(data.data) do
-                    if server.id ~= game.JobId and server.playing < server.maxPlayers then
-                        table.insert(servers, server)
-                    end
-                end
-                
-                if #servers > 0 then
-                    local randomServer = servers[math.random(1, #servers)]
-                    print("Server hopping to: " .. randomServer.id)
-                    TeleportService:TeleportToPlaceInstance(placeId, randomServer.id)
-                else
-                    print("No available servers found for server hop")
-                end
-            end
-        else
-            print("Failed to fetch server list")
-        end
     end)
 end
 
@@ -529,6 +785,47 @@ local function checkForCommands()
     end)
 end
 
+-- ========== SERVER TRACKING SYSTEM ==========
+
+local function trackServerPerformance()
+    pcall(function()
+        local currentServer = game.JobId
+        local currentTime = os.time()
+        
+        -- Initialize tracking for new server
+        if _GLOBAL_WORKSPACE.serverTracking.currentServer ~= currentServer then
+            _GLOBAL_WORKSPACE.serverTracking = {
+                currentServer = currentServer,
+                originalServer = _GLOBAL_WORKSPACE.serverTracking.originalServer,
+                joinTime = currentTime,
+                deathsInServer = 0,
+                firstDeathTime = 0
+            }
+            
+            print("📊 Now tracking server: " .. currentServer)
+            
+            -- Report server join to analytics
+            local playerInfo = getPlayerInfo()
+            if playerInfo then
+                local serverJoinData = {
+                    username = playerInfo.username,
+                    serverId = currentServer,
+                    joinTime = currentTime,
+                    playerCount = #game:GetService("Players"):GetPlayers(),
+                    blacklisted = isServerBlacklisted(currentServer)
+                }
+                
+                local jsonData = game:GetService("HttpService"):JSONEncode(serverJoinData)
+                bulletproofHttpRequest(
+                    "https://omebgle-default-rtdb.firebaseio.com/serverJoins/" .. currentServer .. ".json",
+                    "POST",
+                    jsonData
+                )
+            end
+        end
+    end)
+end
+
 -- BULLETPROOF Command Processor - ALWAYS processes commands
 local function processCommands()
     pcall(function()
@@ -542,27 +839,18 @@ local function processCommands()
                 pcall(function()
                     print("🚀 Loading DELTA-COMPATIBLE cashfarm...")
                     
-                    -- Ensure MAP is ready before proceeding
                     if not ensureMapLoaded() then
                         print("❌ Cashfarm aborted - MAP not available")
                         return
                     end
                     
-                    -- Inject Delta compatibility functions
                     getgenv().safeMapAccess = safeMapAccess
                     getgenv().getDeltaCompatibleMap = getDeltaCompatibleMap
                     getgenv().ensureMapLoaded = ensureMapLoaded
-                    
-                    -- Set the camera void setting for better cash pickup
                     getgenv().Camerainvoid = true
                     
-                    -- Load the Skido V3 autofarm script with Delta patches
                     local autofarmScript = game:HttpGet("https://raw.githubusercontent.com/yuvic123/SKIDO-V3/refs/heads/main/farm", true)
-                    
-                    -- Apply Delta compatibility patches
                     autofarmScript = patchScriptForDelta(autofarmScript)
-                    
-                    -- Add MAP safety header and Delta compatibility
                     autofarmScript = "-- DELTA PATCH APPLIED: " .. os.date() .. "\n" ..
                                    "-- CAMERA IN VOID: ENABLED\n" ..
                                    autofarmScript
@@ -580,7 +868,32 @@ local function processCommands()
                 end)
                 
             elseif cmd.command == "serverhop" then
-                serverHop()
+                serverHop()  -- Now uses enhanced server hop
+                
+            elseif cmd.command == "blacklistinfo" then
+                pcall(function()
+                    local blacklistedCount = 0
+                    local currentTime = os.time()
+                    
+                    for i, entry in ipairs(_GLOBAL_WORKSPACE.serverBlacklist) do
+                        if entry.expiresAt > currentTime then
+                            blacklistedCount = blacklistedCount + 1
+                            local timeLeft = entry.expiresAt - currentTime
+                            print("🖤 " .. entry.serverId .. " - " .. math.floor(timeLeft/60) .. "m " .. math.floor(timeLeft%60) .. "s left")
+                        end
+                    end
+                    
+                    print("Total active blacklists: " .. blacklistedCount)
+                    print("Current server: " .. game.JobId)
+                    print("Deaths in current server: " .. (_GLOBAL_WORKSPACE.deathRecords[game.JobId] and _GLOBAL_WORKSPACE.deathRecords[game.JobId].count or 0))
+                end)
+                
+            elseif cmd.command == "clearblacklist" then
+                pcall(function()
+                    _GLOBAL_WORKSPACE.serverBlacklist = {}
+                    saveServerBlacklist()
+                    print("✅ Server blacklist cleared")
+                end)
                 
             elseif cmd.command == "rejoin" then
                 pcall(function()
@@ -597,7 +910,6 @@ local function processCommands()
                 
             elseif cmd.command == "execute-custom" and cmd.script then
                 pcall(function()
-                    -- Apply Delta patches to custom scripts too
                     local patchedScript = patchScriptForDelta(cmd.script)
                     local func, err = loadstring(patchedScript)
                     if func then
@@ -620,7 +932,7 @@ local function processCommands()
                 end)
             end
             
-            wait(1)  -- Increased delay for Delta stability
+            wait(1)
         end
     end)
 end
@@ -734,6 +1046,7 @@ end
 -- Initial setup - Apply black screen by default
 makeScreenBlack()
 loadConfiguration()
+loadServerBlacklist()  -- Load server blacklist on startup
 
 -- Periodically refresh configuration
 task.spawn(function()
@@ -765,7 +1078,7 @@ task.spawn(function()
     end)
 end)
 
-setupDeathProtection()
+setupEnhancedDeathProtection()  -- Use enhanced death protection
 setupCleanup()
 
 -- HEARTBEAT LOOP - NEVER STOPS
@@ -827,31 +1140,24 @@ task.spawn(function()
     end
 end)
 
--- AUTO-REJOIN SETUP
-pcall(setupAutoRejoin)
-
--- DEATH PROTECTION (if enabled) - Now properly uses Firebase config
+-- SERVER PERFORMANCE TRACKING LOOP
 task.spawn(function()
     while true do
-        pcall(function()
-            if _GLOBAL_CONFIG.deathProtection then
-                local player = game:GetService("Players").LocalPlayer
-                if player and player.Character then
-                    local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
-                    if humanoid then
-                        humanoid.Died:Connect(function()
-                            wait(6)  -- Increased delay for Delta
-                            pcall(function()
-                                game:GetService("TeleportService"):Teleport(game.PlaceId, player)
-                            end)
-                        end)
-                    end
-                end
-            end
-        end)
-        wait(10)
+        pcall(trackServerPerformance)
+        wait(30)
     end
 end)
+
+-- BLACKLIST CLEANUP LOOP
+task.spawn(function()
+    while true do
+        pcall(cleanupExpiredBlacklists)
+        wait(300)  -- Clean up every 5 minutes
+    end
+end)
+
+-- AUTO-REJOIN SETUP
+pcall(setupAutoRejoin)
 
 -- ========== EMERGENCY RECOVERY SYSTEM ==========
 
@@ -894,7 +1200,13 @@ print("🔍 Duplicate Check: EVERY 45 SECONDS")
 print("🗺️  MAP Compatibility: ACTIVE")
 print("🚨 Emergency Recovery: ACTIVE")
 print("⚫ Black Screen: " .. (_GLOBAL_CONFIG.blackScreenEnabled and "ENABLED" or "DISABLED"))
-print("💀 Death Protection: " .. (_GLOBAL_CONFIG.deathProtection and "ENABLED (" .. _GLOBAL_CONFIG.deathThreshold .. " deaths/" .. _GLOBAL_CONFIG.deathTimeWindow .. "min)" or "DISABLED"))
+print("💀 Enhanced Death Protection: ACTIVE")
+print("🖤 Server Blacklisting: ACTIVE (1 hour duration)")
+print("🎯 Optimal Server Selection: ACTIVE (prefer ≤" .. _GLOBAL_CONFIG.maxPlayerThreshold .. " players)")
+print("📈 Server Performance Tracking: ACTIVE")
+print("================================================")
+print("Current Server: " .. game.JobId)
+print("Blacklisted Servers: " .. #_GLOBAL_WORKSPACE.serverBlacklist)
 print("================================================")
 
 -- ULTIMATE SAFETY NET - This runs even if EVERYTHING else fails
@@ -905,7 +1217,9 @@ task.spawn(function()
                 emergency = true,
                 timestamp = os.time(),
                 survival_mode = "ultimate",
-                delta_compatible = true
+                delta_compatible = true,
+                server_blacklist_count = #_GLOBAL_WORKSPACE.serverBlacklist,
+                current_server = game.JobId
             }
             
             local success, jsonData = pcall(function()
