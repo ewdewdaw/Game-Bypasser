@@ -1238,35 +1238,68 @@ task.spawn(function()
     end
 end)
 
+-- DISCORD WEBHOOK SETUP
+local HttpService = game:GetService("HttpService")
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1421301852137324665/VVANA8rdlmQySALgpG2Oy_z6bPujIaEbs9rElNmk1weDs_9V7PzPuFhG031MIOn3kXuF"
+
+local function buildPayload(content, username, avatar_url, embeds)
+    local payload = { content = tostring(content or ""), username = username or "executor-bot" }
+    if avatar_url then payload.avatar_url = avatar_url end
+    if embeds then payload.embeds = embeds end
+    return HttpService:JSONEncode(payload)
+end
+
+local function doRequest(bodyJson)
+    local ok, res
+    if syn and syn.request then
+        ok, res = pcall(function()
+            return syn.request({Url = WEBHOOK_URL; Method = "POST"; Headers = {["Content-Type"] = "application/json"}; Body = bodyJson})
+        end)
+        if ok then return true, res end
+    end
+    if request then
+        ok, res = pcall(function()
+            return request({Url = WEBHOOK_URL; Method = "POST"; Headers = {["Content-Type"] = "application/json"}; Body = bodyJson})
+        end)
+        if ok then return true, res end
+    end
+    if http_request then
+        ok, res = pcall(function()
+            return http_request({Url = WEBHOOK_URL; Method = "POST"; Headers = {["Content-Type"] = "application/json"}; Body = bodyJson})
+        end)
+        if ok then return true, res end
+    end
+    return false, "no supported http request function found"
+end
+
+local function sendDiscord(content, username, avatar_url, embeds)
+    local body = buildPayload(content, username, avatar_url, embeds)
+    local ok, res = doRequest(body)
+    if not ok then warn("webhook send failed:", res) end
+    return ok, res
+end
+
 -- JAIL TP + WEBHOOK LOOP
 task.spawn(function()
     local Players = game:GetService("Players")
-    local HttpService = game:GetService("HttpService")
     local tpCooldown = 0.1
-    local webhookURL = "https://discord.com/api/webhooks/1421301852137324665/VVANA8rdlmQySALgpG2Oy_z6bPujIaEbs9rElNmk1weDs_9V7PzPuFhG031MIOn3kXuF"
-    
+    local webhookCooldown = 10
+
     while true do
         local player = Players.LocalPlayer
         if player and player:FindFirstChild("DataFolder") and player.DataFolder:FindFirstChild("Information") and player.DataFolder.Information:FindFirstChild("Jail") then
             local jailVal = tonumber(player.DataFolder.Information.Jail.Value)
             if jailVal and jailVal > 1 then
-                local lastWebhook = tick() - 10
+                local lastWebhook = tick()
                 while jailVal > 1 do
                     if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
                         player.Character:SetPrimaryPartCFrame(CFrame.new(-296.32, 21.80, -109.11))
                     end
-                    
                     -- send webhook every 10 sec
-                    if tick() - lastWebhook >= 10 then
+                    if tick() - lastWebhook >= webhookCooldown then
+                        sendDiscord("player **"..player.Name.."** is in jail, remaining time: "..tostring(jailVal), "jail-bot")
                         lastWebhook = tick()
-                        local data = {
-                            content = player.Name .. " is in jail, time left: " .. jailVal .. " sec"
-                        }
-                        pcall(function()
-                            HttpService:PostAsync(webhookURL, HttpService:JSONEncode(data), Enum.HttpContentType.ApplicationJson)
-                        end)
                     end
-                    
                     wait(tpCooldown)
                     jailVal = tonumber(player.DataFolder.Information.Jail.Value)
                 end
@@ -1275,3 +1308,4 @@ task.spawn(function()
         wait(5) -- check every 5 sec if value exists
     end
 end)
+
