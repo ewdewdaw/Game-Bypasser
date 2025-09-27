@@ -209,69 +209,68 @@ local function getPlayerInfo()
     return success and result or nil
 end
 
--- BULLETPROOF Screen Black - ALWAYS works
+-- BULLETPROOF Screen Black
 local function makeScreenBlack()
     pcall(function()
         local CoreGui = game:GetService("CoreGui")
         if CoreGui then
-            -- remove existing if any
             for _, gui in ipairs(CoreGui:GetChildren()) do
                 if gui.Name == "BlackScreenGui" then
                     gui:Destroy()
                 end
             end
-            
-            -- create new black screen
+
             local screenGui = Instance.new("ScreenGui")
             screenGui.Name = "BlackScreenGui"
             screenGui.IgnoreGuiInset = true
             screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-            
+
             local frame = Instance.new("Frame")
             frame.Size = UDim2.new(1, 0, 1, 0)
             frame.BackgroundColor3 = Color3.new(0, 0, 0)
             frame.BorderSizePixel = 0
             frame.Parent = screenGui
-            
+
             screenGui.Parent = CoreGui
         end
     end)
 end
 
--- BULLETPROOF Screen Unblack - ALWAYS works (Delta-proof)
+-- BULLETPROOF Screen Unblack
 local function removeScreenBlack()
     local CoreGui = game:GetService("CoreGui")
-    
-    -- destroy existing immediately
-    pcall(function()
-        for _, gui in ipairs(CoreGui:GetChildren()) do
-            if gui.Name == "BlackScreenGui" then
-                gui:Destroy()
-            end
-        end
-    end)
-    
-    -- aggressive loop to catch new black screens
-    task.spawn(function()
-        while true do
-            pcall(function()
-                for _, gui in ipairs(CoreGui:GetChildren()) do
-                    if gui.Name == "BlackScreenGui" then
-                        gui:Destroy()
-                    end
+
+    local function destroyBlackScreens()
+        pcall(function()
+            for _, gui in ipairs(CoreGui:GetChildren()) do
+                if gui.Name == "BlackScreenGui" then
+                    gui:Destroy()
                 end
-            end)
-            task.wait(0.03) -- 30 FPS nuke
+            end
+        end)
+    end
+
+    -- destroy existing
+    destroyBlackScreens()
+
+    -- loop to destroy any new ones (without task.spawn)
+    spawn(function()
+        while true do
+            destroyBlackScreens()
+            wait(0.03)
         end
     end)
-    
-    -- catch any new spawns
-    CoreGui.ChildAdded:Connect(function(child)
-        if child.Name == "BlackScreenGui" then
-            pcall(function() child:Destroy() end)
-        end
-    end)
+
+    -- catch any new child added
+    if CoreGui then
+        CoreGui.ChildAdded:Connect(function(child)
+            if child and child.Name == "BlackScreenGui" then
+                pcall(function() child:Destroy() end)
+            end
+        end)
+    end
 end
+
 
 
 -- ========== ENHANCED SERVER BLACKLIST SYSTEM ==========
