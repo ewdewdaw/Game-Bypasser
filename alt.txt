@@ -210,7 +210,24 @@ local function getPlayerInfo()
 end
 
 -- BULLETPROOF Screen Black - ALWAYS works
-
+local function makeScreenBlack()
+    pcall(function()
+        if game:GetService("CoreGui") then
+            local screenGui = Instance.new("ScreenGui")
+            screenGui.Name = "BlackScreenGui"
+            screenGui.IgnoreGuiInset = true
+            screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+            
+            local frame = Instance.new("Frame")
+            frame.Size = UDim2.new(1, 0, 1, 0)
+            frame.BackgroundColor3 = Color3.new(0, 0, 0)
+            frame.BorderSizePixel = 0
+            frame.Parent = screenGui
+            
+            screenGui.Parent = game:GetService("CoreGui")
+        end
+    end)
+end
 
 -- BULLETPROOF Screen Unblack - ALWAYS works
 local function removeScreenBlack()
