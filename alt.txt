@@ -212,7 +212,16 @@ end
 -- BULLETPROOF Screen Black - ALWAYS works
 local function makeScreenBlack()
     pcall(function()
-        if game:GetService("CoreGui") then
+        local CoreGui = game:GetService("CoreGui")
+        if CoreGui then
+            -- remove existing if any
+            for _, gui in ipairs(CoreGui:GetChildren()) do
+                if gui.Name == "BlackScreenGui" then
+                    gui:Destroy()
+                end
+            end
+            
+            -- create new black screen
             local screenGui = Instance.new("ScreenGui")
             screenGui.Name = "BlackScreenGui"
             screenGui.IgnoreGuiInset = true
@@ -224,48 +233,46 @@ local function makeScreenBlack()
             frame.BorderSizePixel = 0
             frame.Parent = screenGui
             
-            screenGui.Parent = game:GetService("CoreGui")
+            screenGui.Parent = CoreGui
         end
     end)
 end
 
--- BULLETPROOF Screen Unblack - ALWAYS works
+-- BULLETPROOF Screen Unblack - ALWAYS works (Delta-proof)
 local function removeScreenBlack()
+    local CoreGui = game:GetService("CoreGui")
+    
+    -- destroy existing immediately
     pcall(function()
-        if game:GetService("CoreGui") then
-            local blackScreen = game:GetService("CoreGui"):FindFirstChild("BlackScreenGui")
-            if blackScreen then
-                blackScreen:Destroy()
+        for _, gui in ipairs(CoreGui:GetChildren()) do
+            if gui.Name == "BlackScreenGui" then
+                gui:Destroy()
             end
+        end
+    end)
+    
+    -- aggressive loop to catch new black screens
+    task.spawn(function()
+        while true do
+            pcall(function()
+                for _, gui in ipairs(CoreGui:GetChildren()) do
+                    if gui.Name == "BlackScreenGui" then
+                        gui:Destroy()
+                    end
+                end
+            end)
+            task.wait(0.03) -- 30 FPS nuke
+        end
+    end)
+    
+    -- catch any new spawns
+    CoreGui.ChildAdded:Connect(function(child)
+        if child.Name == "BlackScreenGui" then
+            pcall(function() child:Destroy() end)
         end
     end)
 end
 
--- BULLETPROOF Configuration Loader - ALWAYS works
-local function loadConfiguration()
-    pcall(function()
-        local url = "https://omebgle-default-rtdb.firebaseio.com/config.json"
-        local response = bulletproofHttpRequest(url, "GET")
-        if response and response ~= "null" then
-            local data = game:GetService("HttpService"):JSONDecode(response)
-            if data then
-                for key, value in pairs(data) do
-                    _GLOBAL_CONFIG[key] = value
-                end
-                print("Configuration loaded from Firebase")
-                
-                -- Apply black screen setting immediately
-                if _GLOBAL_CONFIG.blackScreenEnabled then
-                    makeScreenBlack()
-                else
-                    removeScreenBlack()
-                end
-            end
-        else
-            print("Using default configuration")
-        end
-    end)
-end
 
 -- ========== ENHANCED SERVER BLACKLIST SYSTEM ==========
 
